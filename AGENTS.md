@@ -58,3 +58,8 @@ State resume: .work/state.json (storyHash, sudah mencakup subtitle).
 ## Status tahap
 - Sekarang: belum ada tahap yang dimulai (v1.0.0 masih rencana).
 - Selesai: v0.1.0 - v0.6.0 (lihat CHANGELOG.md).
+
+## Peta cepat (baca ini dulu, jangan telusuri folder)
+- Tahap saat ini: v0.6.0 selesai (subtitle, preview, finish, qc, publish, make). Berikutnya: v1.0.0.
+- Subtitle: logika `src/story/subs.mjs`, CLI `src/cli/subs.mjs`
+- Detail tahap: `docs/ROADMAP.md`, riwayat: `docs/JOURNAL.md`
