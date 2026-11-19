@@ -1,0 +1,19 @@
+{
+  "name": "@lptech/vigen",
+  "version": "0.2.0",
+  "description": "Vigen — video generator by LPTech",
+  "type": "module",
+  "bin": {
+    "vigen": "bin/vigen.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "author": "LPTech",
+  "scripts": {
+    "doctor": "node bin/vigen.mjs doctor",
+    "test": "node bin/vigen.mjs test"
+  },
+  "dependencies": {}
+}

@@ -1,0 +1,17 @@
+{
+  "configVersion": 1,
+  "engine": { "version": "0.2.0", "name": "Vigen", "vendor": "LPTech" },
+  "paths": {
+    "ffmpeg": "ffmpeg",
+    "ffprobe": "ffprobe",
+    "chromium": "chromium-browser"
+  },
+  "workspace": "/storage/emulated/0/Vigen",
+  "fonts": {
+    "display": "$PREFIX/share/fonts/TTF/DejaVuSerif-Bold.ttf",
+    "ui": "$PREFIX/share/fonts/TTF/DejaVuSans.ttf"
+  },
+  "output": { "width": 1080, "height": 1920, "fps": 30, "crf": 20, "preset": "veryfast" },
+  "render": { "chunk": 300, "tempDir": "$TMPDIR/vigen" },
+  "brand": { "watermark": "LPTech", "outro": 1.5 }
+}

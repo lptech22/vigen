@@ -1,0 +1,13 @@
+node_modules/
+tmp/
+.work/
+out/
+*.mp4
+*.mp3
+*.wav
+*.png
+*.jpg
+*.webm
+.DS_Store
+npm-debug.log*
+config.json

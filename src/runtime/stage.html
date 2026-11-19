@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Vigen Stage</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<script>
+(() => {
+  'use strict';
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  const PALETTE = {
+    bgTop: '#17110c',
+    bgBottom: '#241a11',
+    ink: '#f0e4c9',
+    inkSoft: 'rgba(240,228,201,0.72)',
+    gold: '#c9a227',
+    goldSoft: 'rgba(201,162,39,0.55)',
+    line: 'rgba(240,228,201,0.16)',
+  };
+
+  const state = {
+    width: 1080,
+    height: 1920,
+    fps: 30,
+    duration: 5,
+    watermark: 'LPTech',
+    postUrl: null,
+  };
+
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  const easeOut = (x) => 1 - Math.pow(1 - clamp01(x), 3);
+  const easeInOut = (x) => {
+    x = clamp01(x);
+    return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  };
+  // progres lokal: 0 sebelum start, 1 setelah start+dur
+  const span = (t, start, dur) => clamp01((t - start) / dur);
+
+  // ukuran font menyesuaikan lebar aman (deterministik, tanpa coba-coba)
+  function fitFont(text, base, maxWidth, family, weight = '700') {
+    ctx.save();
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '4px';
+    ctx.font = `${weight} ${base}px ${family}`;
+    const w = ctx.measureText(text).width;
+    ctx.restore();
+    if (w <= maxWidth) return base;
+    return Math.max(24, Math.floor((base * maxWidth) / w));
+  }
+
+  function drawBackground(w, h) {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, PALETTE.bgTop);
+    g.addColorStop(1, PALETTE.bgBottom);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+
+    const v = ctx.createRadialGradient(w / 2, h * 0.42, h * 0.1, w / 2, h * 0.5, h * 0.78);
+    v.addColorStop(0, 'rgba(255,236,196,0.055)');
+    v.addColorStop(0.55, 'rgba(0,0,0,0)');
+    v.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  function drawFrameBorder(w, h) {
+    const m = 40;
+    ctx.save();
+    ctx.strokeStyle = PALETTE.line;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(m, m, w - m * 2, h - m * 2);
+    ctx.restore();
+  }
+
+  function drawWatermark(w, h) {
+    ctx.save();
+    ctx.font = '400 28px VigenUI, sans-serif';
+    ctx.fillStyle = 'rgba(240,228,201,0.38)';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'alphabetic';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '2px';
+    ctx.fillText(state.watermark, w - 64, h - 64);
+    ctx.restore();
+  }
+
+  function drawProgress(w, h, t) {
+    const p = clamp01(t / state.duration);
+    ctx.save();
+    ctx.fillStyle = 'rgba(201,162,39,0.20)';
+    ctx.fillRect(64, h - 96, w - 128, 3);
+    ctx.fillStyle = PALETTE.gold;
+    ctx.fillRect(64, h - 96, (w - 128) * p, 3);
+    ctx.restore();
+  }
+
+  function draw(t) {
+    const w = state.width;
+    const h = state.height;
+    const cx = w / 2;
+    const cy = h * 0.47;
+
+    drawBackground(w, h);
+    drawFrameBorder(w, h);
+
+    // grup utama bergerak halus (parallax deterministik)
+    const drift = -6 * clamp01(t / state.duration);
+
+    // label atas
+    const labelP = easeOut(span(t, 0.15, 0.5));
+    if (labelP > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.85 * labelP;
+      ctx.font = '600 27px VigenUI, sans-serif';
+      ctx.fillStyle = PALETTE.gold;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      if ('letterSpacing' in ctx) ctx.letterSpacing = '7px';
+      ctx.fillText('SEJARAH  ·  EP 01', cx, cy - 205 + drift);
+      ctx.restore();
+    }
+
+    // judul besar
+    const titleP = easeOut(span(t, 0.0, 0.62));
+    if (titleP > 0) {
+      const family = 'VigenDisplay, "DejaVu Serif", serif';
+      const size = fitFont('40 HARI', 184, w - 180, family);
+      const rise = (1 - titleP) * 46;
+      const scale = 0.965 + 0.035 * easeOut(span(t, 0.0, 0.9));
+      ctx.save();
+      ctx.globalAlpha = titleP;
+      ctx.translate(cx, cy + rise + drift);
+      ctx.scale(scale, scale);
+      ctx.font = `700 ${size}px ${family}`;
+      ctx.fillStyle = PALETTE.ink;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if ('letterSpacing' in ctx) ctx.letterSpacing = '4px';
+      ctx.fillText('40 HARI', 0, 0);
+      ctx.restore();
+    }
+
+    // subjudul
+    const subP = easeOut(span(t, 0.85, 0.55));
+    if (subP > 0) {
+      const rise = (1 - subP) * 28;
+      ctx.save();
+      ctx.globalAlpha = subP;
+      ctx.font = '400 44px VigenUI, sans-serif';
+      ctx.fillStyle = PALETTE.inkSoft;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if ('letterSpacing' in ctx) ctx.letterSpacing = '3px';
+      ctx.fillText('MALAKA · 1511', cx, cy + 138 + rise + drift);
+      ctx.restore();
+    }
+
+    // garis aksen tumbuh dari tengah
+    const lineP = easeInOut(span(t, 1.5, 0.75));
+    if (lineP > 0) {
+      const full = 300;
+      const lw = full * lineP;
+      ctx.save();
+      ctx.fillStyle = PALETTE.gold;
+      ctx.fillRect(cx - lw / 2, cy + 205 + drift, lw, 4);
+      ctx.restore();
+    }
+
+    // caption bawah
+    const capP = easeOut(span(t, 2.5, 0.6));
+    if (capP > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.62 * capP;
+      ctx.font = '400 30px VigenUI, sans-serif';
+      ctx.fillStyle = PALETTE.ink;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if ('letterSpacing' in ctx) ctx.letterSpacing = '1px';
+      ctx.fillText('sumber: catatan arsip', cx, cy + 300 + drift);
+      ctx.restore();
+    }
+
+    // penutup kecil di detik 4
+    const endP = easeOut(span(t, 3.9, 0.5));
+    if (endP > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.5 * endP;
+      ctx.font = '400 24px VigenUI, sans-serif';
+      ctx.fillStyle = PALETTE.ink;
+      ctx.textAlign = 'center';
+      ctx.fillText('bagian 1 dari 1', cx, h - 190);
+      ctx.restore();
+    }
+
+    drawProgress(w, h, t);
+    drawWatermark(w, h);
+  }
+
+  window.boot = async function boot(cfg) {
+    state.width = cfg.width || 1080;
+    state.height = cfg.height || 1920;
+    state.fps = cfg.fps || 30;
+    state.duration = cfg.duration || 5;
+    state.watermark = cfg.watermark || 'LPTech';
+    state.postUrl = cfg.postUrl || null;
+
+    canvas.width = state.width;
+    canvas.height = state.height;
+    canvas.style.width = state.width + 'px';
+    canvas.style.height = state.height + 'px';
+
+    const fonts = cfg.fonts || {};
+    for (const [family, dataUrl] of Object.entries(fonts)) {
+      const face = new FontFace(family, `url(${dataUrl})`);
+      await face.load();
+      document.fonts.add(face);
+    }
+    await document.fonts.ready;
+
+    draw(0);
+    return true;
+  };
+
+  window.seek = function seek(t) {
+    draw(t);
+    return true;
+  };
+
+  window.__frame = function frame(t) {
+    draw(t);
+    return canvas.toDataURL('image/png');
+  };
+
+  window.__frameEnc = function frameEnc(t, type, quality) {
+    draw(t);
+    return canvas.toDataURL(type, quality);
+  };
+
+  window.__sendFrame = async function sendFrame(t, fmt) {
+    draw(t);
+    if (!state.postUrl) throw new Error('postUrl belum diatur');
+    let body;
+    const [kind, q] = String(fmt || 'raw').split(':');
+    if (kind === 'png' || kind === 'jpeg' || kind === 'webp') {
+      const type = `image/${kind}`;
+      const quality = q === undefined ? 0.95 : Number(q);
+      body = await new Promise((resolve, reject) => {
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob gagal'))), type, quality);
+      });
+    } else {
+      body = ctx.getImageData(0, 0, state.width, state.height).data;
+    }
+    const res = await fetch(state.postUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', 'X-Vigen-Format': kind || 'raw' },
+      body,
+    });
+    if (!res.ok) throw new Error('POST frame gagal: ' + res.status);
+    return body.length || body.size;
+  };
+
+  window.__bench = function bench(t) {
+    draw(t);
+    const a = performance.now();
+    const d = canvas.toDataURL('image/png');
+    const b = performance.now();
+    return { encodeMs: Math.round((b - a) * 10) / 10, bytes: d.length };
+  };
+
+  window.__info = function info() {
+    return { width: state.width, height: state.height, fps: state.fps, duration: state.duration };
+  };
+})();
+</script>
+</body>
+</html>
