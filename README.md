@@ -4,7 +4,7 @@
 
 > *Tulis naskah. Vigen bikin videonya.*
 
-Status: **v0.5.0** — storyboard 8 tipe scene, style `sejarah/sepia-archive`, 6 gag, dan audit safe area per frame. Render deterministik + jalur audio sudah lulus uji.
+Status: **v0.5.1** — `vigen prompt` (wizard AI), `vigen voice` (satu teks TTS), timeline 1 audio proporsional, di atas storyboard 8 scene + 6 gag dan audit safe area.
 
 ---
 
@@ -50,6 +50,8 @@ Engine sengaja disimpan di `~/.vigen` (tersembunyi dari file manager/Galeri Andr
 | `vigen doctor` | Periksa node, ffmpeg, chromium, font, storage, workspace, memori |
 | `vigen setup` | Siapkan workspace `Vigen/` + `Konten 1` (idempoten, mengadopsi folder lama) |
 | `vigen new "Konten 2"` | Buat project baru lengkap dengan template |
+| `vigen prompt` | Wizard: judul, durasi, voice, scene → project + `prompt.txt` |
+| `vigen voice "Konten 2"` | Ekstrak `narasi` dari `scene.js` → `voice.txt` |
 | `vigen list` | Daftar project + status (`baru → naskah → siap render → selesai`) |
 | `vigen timing "Konten 2"` | Hitung timeline dari durasi voice (atau estimasi kata/detik) |
 | `vigen audio "Konten 2"` | Rangkai voice + musik + SFX, loudnorm, tulis `out/audio.wav` |
@@ -65,6 +67,9 @@ Contoh cepat:
 ```bash
 vigen setup
 vigen new "Konten 2"
+vigen prompt
+vigen prompt "Konten 3" --duration 45 --voices 1 --scenes 8 --yes
+vigen voice "Konten 3"
 vigen list
 
 vigen timing "Konten 2"
@@ -134,8 +139,9 @@ SFX yang tersedia: `whoosh`, `boom`, `scratch`, `pop`, `tick`. Semuanya dibuat p
 
 Perilaku penting:
 
-- Nama file `voice/` diurutkan natural (`s2` sebelum `s10`); urutan file = urutan scene.
-- Durasi scene diambil dari file voice asli; jeda default **0,35 dtk** (`--gap`).
+- Mode `scenes`: `voice/s01.mp3 …`; urutan natural = urutan scene, jeda **0,35 dtk** (`--gap`).
+- Mode `single`: satu file `voice/narasi.mp3`; durasi dibagi proporsional dari jumlah kata `narasi`, tanpa jeda buatan.
+- Mode `blocks`: `voice/voice-1.mp3 …`; tiap blok dibagi proporsional, jeda hanya di antara blok.
 - Bila `voice/` kosong, timeline memakai estimasi **2,4 kata/detik** dari `narasi` di `script.json` (`--wps`) supaya visual bisa disiapkan lebih dulu.
 - Musik di-*ducking* **−9 dB** selama voice aktif, dengan ramp 60 ms masuk dan 250 ms keluar. Ducking dihitung dari timeline, bukan `sidechaincompress`, supaya hasilnya deterministik.
 - `loudnorm` 2-pass ke **−14 LUFS**, ceiling true peak −1,5 dB, output 48 kHz stereo.
@@ -153,6 +159,64 @@ Hasil uji audio (project 3 scene, 7,800 dtk):
 | Reflow durasi | satu MP3 2,1 → 4,2 dtk, total 5,7 → 7,8 dtk, offset tetap |
 | Determinisme | 3 build bersih → sha256 `513a23…b6c7` identik |
 | Mux | 1080×1920 30fps H.264 + AAC 192k, 7,800 dtk |
+
+## Alur AI: prompt → scene.js → voice
+
+Sejak v0.5.1, AI hanya perlu mengembalikan **satu file** (`scene.js`). Token lebih hemat dan tidak ada duplikasi teks.
+
+```bash
+vigen prompt
+# Judul konten      : 40 Hari Malaka
+# Durasi target (dtk): 45
+# Jumlah voice      : 1
+# Jumlah scene      : 8
+```
+
+Perintah itu:
+- membuat project `Vigen/40 Hari Malaka/`
+- menulis `prompt.txt` (siap tempel ke ChatGPT/Claude/Gemini)
+- menyimpan parameter di `vigen.project.json` (`spec`, `audio.mode`)
+- mencetak langkah berikutnya di Termux
+
+Setelah AI menjawab:
+
+```bash
+# 1. simpan jawaban AI sebagai scene.js
+# 2. tiap scene punya field narasi (teks yang diucapkan)
+vigen voice "40 Hari Malaka"     # → voice.txt (gabungan semua narasi)
+# 3. copy voice.txt ke ElevenLabs SEKALI → voice/narasi.mp3
+vigen check "40 Hari Malaka"
+vigen timing "40 Hari Malaka"
+vigen audio "40 Hari Malaka"
+vigen render "40 Hari Malaka"
+```
+
+Mode audio yang didukung:
+
+| Mode | File voice | Pembagian durasi |
+|---|---|---|
+| `single` (default) | `voice/narasi.mp3` | proporsional dari jumlah kata `narasi` tiap scene |
+| `blocks` | `voice/voice-1.mp3 …` | per blok scene, proporsional; jeda 0,35 dtk antar blok |
+| `scenes` (lama) | `voice/s01.mp3 …` | presisi penuh, satu file per scene |
+
+Catatan:
+- `vigen prompt` **tidak** memanggil API AI; semua offline, kamu yang copy-paste.
+- Default: 45 dtk, 8 scene, 1 voice. Bisa diubah lewat pertanyaan atau flag `--duration/--voices/--scenes`.
+- `vigen voice` memakai `narasi`, bukan teks layar. Teks layar tetap yang tampil di video.
+- Satu audio = paling praktis; sinkronisasi antar scene mengikuti porsi kata. Butuh presisi? pakai mode `scenes`.
+- `vigen voice --voices 2` menulis `tts/voice-1.txt` dan `tts/voice-2.txt` untuk mode blok.
+
+Hasil uji v0.5.1:
+
+| Uji | Hasil |
+|---|---|
+| `prompt.txt` | 110 baris · 687 kata · parameter terkunci |
+| 1 audio 10,500 dtk / 4 scene | split 3,122 · 2,554 · 2,554 · 2,270 dtk |
+| Voice bus | 10,500 dtk (audio tidak terduplikasi) |
+| 2 blok | total 9,350 dtk · jeda 0,350 dtk di antara blok |
+| Render | 360 frame · 12,000 dtk · AAC 48 kHz stereo |
+| Determinisme | render `--force` → sha256 identik |
+| Audit | 1.412 kotak teks · 0 pelanggaran |
 
 ## Storyboard & humor
 
@@ -267,9 +331,9 @@ Keputusan penting: frame **tidak** dikirim lewat CDP sebagai base64 (mahal), mel
 ~/.vigen/
 ├─ bin/vigen.mjs           launcher CLI
 ├─ src/
-│  ├─ cli/                 doctor, setup, new, list, timing, audio, render, check, still, test
+│  ├─ cli/                 doctor, setup, new, prompt, voice, list, timing, audio, render, check, still, test
 │  ├─ core/                config, util, workspace
-│  ├─ story/               storyboard (skema, timeline, demo) + prepare
+│  ├─ story/               storyboard, prompt builder, narration, prepare
 │  ├─ render/              browser (CDP), host, render, encode
 │  ├─ audio/               timeline, mix (ducking + loudnorm), sfx, probe
 │  └─ runtime/stage.html   kanvas, 8 scene + 6 gag, audit safe area
@@ -287,6 +351,7 @@ Keputusan penting: frame **tidak** dikirim lewat CDP sebagai base64 (mahal), mel
 | v0.3.0 — workspace (`setup`, `new`, `list`) | ✅ selesai |
 | v0.4.0 — audio (voice, ducking, loudnorm, SFX) | ✅ selesai |
 | v0.5.0 — storyboard, sepia-archive, 8 scene, 6 gag, safe-area QC | ✅ selesai |
+| v0.5.1 — prompt AI + voice sekali generate (1 audio) | ✅ selesai |
 | v0.6.0 — subtitle, preview, publikasi, QC | ⏳ berikutnya |
 | v1.0.0 — distribusi GitHub + npm | rencana |
 

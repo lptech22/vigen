@@ -333,6 +333,71 @@ Project 3 scene dengan voice sintetis 1,2 / 1,6 / 1,4 dtk. Ringkasan render mena
 - Determinisme dan mux audio lulus.
 - Versi dinaikkan ke 0.5.0; README, ROADMAP, CHANGELOG diperbarui.
 
+---
+
+## 19 Nov 2026 — Sesi 5: prompt AI & voice sekali generate v0.5.1
+
+### 10:40 — Masalah yang mau ditutup
+Sesi 4 sudah punya storyboard lengkap, tetapi alurnya masih manual: pengguna harus menulis `narasi` di `script.json`, membuat teks TTS sendiri, lalu menyimpan satu audio per scene. Tiga friksi:
+1. AI harus mengembalikan banyak file / teks ganda.
+2. Generate TTS berkali-kali memakan kuota.
+3. Sinkronisasi audio utuh ke scene belum ada.
+
+Keputusan: **narasi disimpan di dalam tiap scene `scene.js`**. AI hanya mengembalikan satu file; mesin yang mengekstrak dan membagi.
+
+### 10:42 — `vigen prompt`
+Wizard meminta judul, durasi, jumlah voice, dan jumlah scene, lalu:
+- membuat project baru otomatis (nama folder = judul),
+- menulis `prompt.txt` (110 baris, 687 kata),
+- menyimpan `spec` + `audio.mode` di `vigen.project.json`,
+- mencetak langkah kerja berikutnya.
+
+Default: **45 dtk / 1 voice / 8 scene**. Mode non-interaktif: `--yes` plus flag `--duration/--voices/--scenes`.
+
+Prompt sepenuhnya offline — tidak ada panggilan API. Rencana scene: `s01` hook, tengah berputar `fact/timeline/stat/quote/deadpan`, terakhir punchline. Outro tidak ditulis karena mesin menambah 1,5 dtk otomatis.
+
+### 10:45 — `vigen voice`
+`src/story/narration.mjs` membaca `scene.js` lewat validator yang sama dengan render. `vigen voice` menggabungkan semua `narasi` menjadi `voice.txt` (satu teks untuk sekali generate TTS). Untuk `--voices N`, dipakai `splitByWords` yang sama dengan timeline, sehingga teks TTS dan pembagian scene tidak mungkin berbeda.
+
+### 10:47 — Timeline tiga mode
+| Mode | File | Pembagian |
+|---|---|---|
+| `scenes` | `voice/s01.mp3 …` | durasi asli per file, jeda 0,35 dtk |
+| `single` | `voice/narasi.mp3` | proporsional bobot kata, tanpa jeda buatan |
+| `blocks` | `voice/voice-1.mp3 …` | proporsional per blok, jeda hanya antar blok |
+
+Estimasi 2,4 kata/detik tetap menjadi fallback bila `voice/` kosong.
+
+### 10:49 — Bug voice bus terduplikasi
+Uji pertama mode single: `voice-bus.wav` menjadi **2,1× lebih panjang** dari audio aslinya. Penyebab: voice bus menempelkan file yang sama sekali per scene. Perbaikan: timeline menyimpan `groups` (file + rentang waktu), dan voice bus serta `duckExpression` memakai `groups`, bukan `scenes`.
+
+Kerusakan sampingan yang tertangkap: `scenesTimeline` sempat memakai `dur = 0` dan `pending: true` karena refactor setengah jalan. Diperbaiki agar tetap memanggil `probeDuration` seperti versi lama. Uji ulang memastikan mode `scenes` masih identik perilakunya.
+
+### 10:52 — Hasil uji
+Project 4 scene, narasi 37 kata, audio sintetis 10,500 dtk:
+
+| Scene | Kata | Start → End |
+|---|---|---|
+| s01 | 11 | 0,000 → 3,122 |
+| s02 | 9 | 3,122 → 5,676 |
+| s03 | 9 | 5,676 → 8,230 |
+| s04 | 8 | 8,230 → 10,500 |
+
+Voice bus tepat **10,500 dtk**, jadi tidak ada duplikasi. Mode 2 blok (5 dtk + 4 dtk) → total **9,350 dtk**, jeda 0,350 dtk hanya di antara blok (s02 berakhir 5,000; s03 mulai 5,350).
+
+### 10:54 — Render & audit
+`vigen render` 360 frame / 12,000 dtk, H.264 `yuv420p`, AAC 48 kHz stereo. `--force` menghasilkan sha256 identik `fcc74a66…78cb0e4`. Audit mode single: 360 frame, 1.412 kotak, 0 pelanggaran. Audit mode blok: 326 frame, 1.250 kotak, 0 pelanggaran.
+
+### 10:56 — Wizard diuji lewat PTY
+`script -qec` dipakai untuk mensimulasikan TTY. Temuan: `readline` butuh `\r`, bukan `\n`; input `\n\n\n` membuat proses berhenti dengan "Aborted with Ctrl+D". Setelah memakai `\r` dengan jeda kecil, default 45/1/8 diterapkan dan project terbuat benar. Ini murni perilaku uji, bukan bug di Termux asli.
+
+### 10:58 — Verifikasi akhir
+- `vigen prompt` membuat `prompt.txt` sesuai parameter (id terakhir mengikuti jumlah scene).
+- `vigen voice` menghasilkan `voice.txt` dan memperingatkan bila narasi lebih panjang dari target.
+- Mode single dan blocks lulus audio, audit, dan render.
+- Versi dinaikkan ke 0.5.1; README, ROADMAP, CHANGELOG diperbarui.
+- Project uji (`Uji Prompt`, `Uji Blok`, `Uji Wizard`) dihapus; workspace kembali hanya `Konten 1` dan `Konten 2`.
+
 ## Ringkasan angka sesi 1
 
 | Metrik | Nilai |

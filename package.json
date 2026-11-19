@@ -1,6 +1,6 @@
 {
   "name": "@lptech/vigen",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Vigen — video generator by LPTech",
   "type": "module",
   "bin": {

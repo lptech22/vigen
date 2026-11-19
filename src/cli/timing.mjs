@@ -18,12 +18,22 @@ export async function timingCommand(argv) {
 
   line(`${color.bold('Vigen timing')} ${color.gray(`— ${project.name}`)}`);
   ok(`timeline: ${timeline.scenes.length} scene · total ${timeline.totalDuration.toFixed(3)} dtk`);
-  info(`sumber: ${timeline.source === 'voice' ? 'durasi voice asli' : `estimasi ${wps} kata/dtk (voice belum ada)`}`);
-  info(`jeda antar scene: ${gap} dtk`);
+  const sourceLabels = {
+    voice: 'durasi voice per scene',
+    'voice-single': 'satu audio utuh, durasi dibagi proporsional per kata',
+    'voice-blocks': `${timeline.groups?.length || 0} blok audio, dibagi proporsional per kata`,
+    estimate: `estimasi ${wps} kata/dtk (voice belum ada)`,
+  };
+  info(`sumber: ${sourceLabels[timeline.source] || timeline.source}`);
+  info(`mode: ${timeline.mode || 'scenes'} · jeda antar scene: ${timeline.gap ?? gap} dtk`);
+
+  for (const n of timeline.notes || []) warn(n);
 
   section('Scene');
   for (const s of timeline.scenes) {
-    const src = s.file ? s.file : `estimasi ${s.words} kata`;
+    const src = s.file
+      ? `${s.file}${s.words ? ` · ${s.words} kata` : ''}`
+      : `estimasi ${s.words} kata`;
     line(`  ${color.gray(s.id.padEnd(8))} ${String(s.start.toFixed(3)).padStart(8)} → ${String(s.end.toFixed(3)).padStart(8)}  ${color.gray(src)}`);
   }
 

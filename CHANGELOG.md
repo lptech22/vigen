@@ -2,6 +2,30 @@
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), versi mengikuti [SemVer](https://semver.org/lang/id/).
 
+## [0.5.1] — 2026-11-19
+
+### Ditambahkan
+- `vigen prompt`: wizard judul, durasi, jumlah voice, jumlah scene; membuat project otomatis dan menulis `prompt.txt` siap tempel ke AI.
+- `vigen prompt --yes`: mode non-interaktif dengan default 45 dtk / 1 voice / 8 scene.
+- `vigen voice "<project>"`: ekstrak field `narasi` dari `scene.js` menjadi `voice.txt` (satu teks untuk sekali generate TTS).
+- `vigen voice --voices N`: menulis `tts/voice-1.txt …` untuk mode blok.
+- Field `narasi` per scene (teks diucapkan, terpisah dari teks layar).
+- Timeline mode `single`: satu audio utuh dibagi proporsional dari jumlah kata `narasi`.
+- Timeline mode `blocks`: beberapa audio, tiap file mencakup beberapa scene berurutan; jeda hanya antar blok.
+- `groups` pada timeline agar audio utuh hanya ditempel sekali oleh voice bus.
+- `spec` dan `audio` disimpan di `vigen.project.json`.
+
+### Diperbaiki
+- Voice bus tidak lagi menggandakan file audio yang sama untuk setiap scene pada mode single/blocks.
+- Ducking musik memakai grup audio, bukan scene, sehingga tidak menumpuk pada satu file utuh.
+- Pesan sumber timeline di `timing`/`render`/`audio` membedakan mode per scene, single, blok, dan estimasi.
+
+### Teknis
+- Prompt 110 baris / 687 kata, offline tanpa API.
+- Uji 1 audio 10,500 dtk / 4 scene: split 3,122 · 2,554 · 2,554 · 2,270 dtk.
+- Uji 2 blok: total 9,350 dtk, jeda 0,350 dtk.
+- Render 360 frame / 12,000 dtk + AAC, deterministik (sha256 identik).
+
 ## [0.5.0] — 2026-11-19
 
 ### Ditambahkan

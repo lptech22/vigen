@@ -131,6 +131,7 @@ export default {
     {
       id: 's01',
       type: 'hook',
+      narasi: 'Pada 1511, Malaka jatuh ke tangan Portugis. Setidaknya begitu kata catatan resmi.',
       kicker: 'SEJARAH · EP 01',
       title: 'JUDUL EPISODE',
       subtitle: 'SUBJUDUL · TAHUN',
@@ -138,6 +139,7 @@ export default {
     {
       id: 's02',
       type: 'fact',
+      narasi: 'Konon armada hanya menunggu empat puluh hari sebelum angin berubah arah.',
       kicker: 'FAKTA',
       title: 'Judul fakta yang bikin penasaran',
       body: 'Satu paragraf singkat. Tulis apa adanya, jangan bertele-tele. '
@@ -147,6 +149,7 @@ export default {
     {
       id: 's03',
       type: 'timeline',
+      narasi: 'Urutan kejadiannya sering tertukar, dan setiap versi punya pembelanya.',
       kicker: 'GARIS WAKTU',
       title: 'Urutan kejadian',
       items: [
@@ -159,6 +162,7 @@ export default {
     {
       id: 's04',
       type: 'punchline',
+      narasi: 'Rencananya sempurna. Sayangnya, tidak ada yang membawa peta.',
       setup: 'Dan bagian yang paling masuk akal:',
       text: 'TIDAK ADA.',
       pause: 0.4,
@@ -187,6 +191,8 @@ function projectMeta(name, slug, cfg, extra = {}) {
       height: cfg.output.height,
       fps: cfg.output.fps,
     },
+    ...(extra.spec ? { spec: extra.spec } : {}),
+    ...(extra.audio ? { audio: extra.audio } : {}),
   };
 }
 

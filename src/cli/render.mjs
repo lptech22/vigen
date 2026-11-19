@@ -44,7 +44,15 @@ export async function renderCommand(argv) {
   line(`${color.bold('Vigen render')} ${color.gray(`— ${project.name}`)}`);
   ok(`storyboard: ${storyboard.scenes.length} scene · ${duration.toFixed(3)} dtk · ${width}x${height} @${fps}fps`);
   info(`${totalFrames} frame · ${capture}`);
-  if (timeline) info(`timeline: ${timeline.source === 'voice' ? 'durasi voice asli' : 'estimasi naskah'}`);
+  if (timeline) {
+    const labels = {
+      voice: 'durasi voice per scene',
+      'voice-single': '1 audio utuh · dibagi proporsional',
+      'voice-blocks': 'blok audio · dibagi proporsional',
+      estimate: 'estimasi naskah',
+    };
+    info(`timeline: ${labels[timeline.source] || timeline.source}`);
+  }
   for (const n of storyboard.notes) warn(n);
 
   const audioFile = path.join(outDir, 'audio.wav');

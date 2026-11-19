@@ -9,6 +9,7 @@ Rencana berbasis versi. Aturan main: versi berikutnya tidak dimulai sebelum DoD 
 | v0.3.0 | Workspace | ✅ selesai |
 | v0.4.0 | Audio | ✅ selesai |
 | v0.5.0 | Visual & humor | ✅ selesai |
+| v0.5.1 | Prompt AI & voice | ✅ selesai |
 | v0.6.0 | Publikasi & QC | rencana |
 | v1.0.0 | Distribusi | rencana |
 
@@ -82,6 +83,24 @@ Rencana berbasis versi. Aturan main: versi berikutnya tidak dimulai sebelum DoD 
 - Gag sadar tata letak lewat `layout.textBottom` / `layout.asideTop`: struk jadi lower-third, vinyl di pita atas, chat bubble naik menghindari `aside`. Semua tetap `f(t)`, jadi deterministik.
 - `storyHash` masuk meta resume supaya perubahan storyboard membatalkan segmen lama.
 - Ditemukan saat uji audio: `findByTimeline` memakai `tl.totalDuration` (array scene) → `end` scene terakhir `NaN` dan scene tidak pernah digambar. Diperbaiki ke `timeline.totalDuration` + penjaga rentang waktu.
+
+## v0.5.1 — Prompt AI & voice sekali generate ✅
+
+**Deliverable:** `vigen prompt` (wizard + `prompt.txt`), `vigen voice` (narasi → `voice.txt`), timeline mode `single`/`blocks`, field `narasi` per scene.
+
+**DoD tercapai:**
+- `vigen prompt` interaktif (judul, durasi, voice, scene) dan non-interaktif (`--duration/--voices/--scenes/--yes`); project + `prompt.txt` 110 baris / 687 kata.
+- AI hanya menghasilkan `scene.js`; `vigen voice` mengekstrak narasi → `voice.txt`.
+- 1 audio 10,500 dtk / 4 scene → split proporsional **3,122 / 2,554 / 2,554 / 2,270 dtk**; voice bus tetap 10,500 dtk (tidak terduplikasi).
+- Mode 2 blok: total 9,350 dtk, jeda 0,350 dtk hanya di antara blok.
+- Render 360 frame / 12,000 dtk + AAC 48 kHz stereo; render `--force` sha256 identik; audit 1.412 kotak teks, 0 pelanggaran.
+- Mode `scenes` lama tetap berjalan.
+
+**Keputusan teknis penting:**
+- `narasi` disimpan di `scene.js`, bukan file terpisah, supaya AI hanya mengembalikan satu file dan tidak ada duplikasi teks.
+- Durasi single mode memakai bobot kata; `groups` di timeline memastikan audio utuh hanya ditempel sekali, bukan sekali per scene.
+- `vigen voice` dan timeline memakai pembagi blok yang sama (`splitByWords`), jadi teks TTS dan pembagian scene selalu konsisten.
+- Prompt sepenuhnya offline (tanpa API berbayar); pengguna copy-paste ke AI.
 
 ## v0.6.0 — Publikasi & QC
 

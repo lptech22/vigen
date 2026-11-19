@@ -10,6 +10,8 @@ ${color.bold('Perintah')}
   doctor            Periksa lingkungan (node, ffmpeg, chromium, font, storage)
   setup             Siapkan workspace Vigen + project pertama
   new <nama>        Buat project baru, contoh: vigen new "Konten 2"
+  prompt [judul]    Wizard prompt AI + buat project otomatis
+  voice [project]   Ekstrak narasi scene.js jadi voice.txt untuk TTS
   list              Daftar project + status
   timing [project]  Hitung timeline dari durasi voice (atau estimasi)
   audio [project]   Rangkai voice + musik + SFX, loudnorm, opsional mux
@@ -23,6 +25,9 @@ ${color.bold('Perintah')}
 ${color.bold('Contoh')}
   vigen setup
   vigen new "Konten 2"
+  vigen prompt
+  vigen prompt "Konten 2" --duration 45 --voices 1 --scenes 8 --yes
+  vigen voice "Konten 2"
   vigen list
   vigen timing "Konten 2"
   vigen audio "Konten 2"
@@ -49,6 +54,14 @@ ${color.bold('Opsi test')}
   --hash-file <file>  Tulis hash ke file JSON
   --force             Abaikan state lama, render dari awal
   --quiet             Tanpa progres per frame
+
+${color.bold('Opsi prompt / voice')}
+  --duration <dtk>    prompt: durasi target (default: 45)
+  --voices <n>        prompt/voice: jumlah audio (default: 1)
+  --scenes <n>        prompt: jumlah scene cerita (default: 8)
+  --yes               prompt: pakai default tanpa tanya
+  --out <file>        voice: path voice.txt (default: root project)
+  --wps <n>           voice: estimasi kata/detik (default: 2.4)
 
 ${color.bold('Opsi timing / audio')}
   --gap <dtk>         Jeda antar scene (default: 0.35)
@@ -99,6 +112,16 @@ export async function main(argv) {
   if (cmd === 'new') {
     const { newCommand } = await import('./new.mjs');
     return newCommand(rest);
+  }
+
+  if (cmd === 'prompt') {
+    const { promptCommand } = await import('./prompt.mjs');
+    return promptCommand(rest);
+  }
+
+  if (cmd === 'voice') {
+    const { voiceCommand } = await import('./voice.mjs');
+    return voiceCommand(rest);
   }
 
   if (cmd === 'list') {

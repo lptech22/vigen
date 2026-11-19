@@ -31,7 +31,13 @@ export async function audioCommand(argv) {
     : existing;
 
   line(`${color.bold('Vigen audio')} ${color.gray(`— ${project.name}`)}`);
-  ok(`timeline: ${timeline.scenes.length} scene · ${timeline.totalDuration.toFixed(3)} dtk (${timeline.source})`);
+  const modeLabel = {
+    voice: 'per scene',
+    'voice-single': '1 audio utuh',
+    'voice-blocks': `${timeline.groups?.length || 0} blok audio`,
+    estimate: 'estimasi naskah',
+  }[timeline.source] || timeline.source;
+  ok(`timeline: ${timeline.scenes.length} scene · ${timeline.totalDuration.toFixed(3)} dtk (${modeLabel})`);
 
   const started = Date.now();
   const result = await buildAudio({ cfg, project, timeline, options: {

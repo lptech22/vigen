@@ -62,9 +62,37 @@ export function readSfxCues(projectDir, override) {
   return parseCueFile(p);
 }
 
+function voiceGroups(timeline) {
+  if (Array.isArray(timeline.groups) && timeline.groups.length) {
+    return timeline.groups
+      .filter((g) => g.file && Number.isFinite(g.start))
+      .map((g) => ({
+        file: g.file,
+        start: g.start,
+        duration: Number(g.duration ?? (g.end - g.start)),
+        end: Number(g.end ?? (g.start + g.duration)),
+      }))
+      .sort((a, b) => a.start - b.start);
+  }
+  return timeline.scenes
+    .filter((s) => s.file)
+    .reduce((groups, s) => {
+      const end = Number(s.end ?? (s.start + s.duration));
+      const hit = groups.find((g) => g.file === s.file);
+      if (hit) {
+        hit.end = Math.max(hit.end, end);
+        hit.duration = hit.end - hit.start;
+      } else {
+        groups.push({ file: s.file, start: s.start, duration: end - s.start, end });
+      }
+      return groups;
+    }, [])
+    .sort((a, b) => a.start - b.start);
+}
+
 async function renderVoiceBus(cfg, projectDir, timeline, dir) {
-  const scenes = timeline.scenes.filter((s) => s.file);
-  if (!scenes.length) {
+  const groups = voiceGroups(timeline);
+  if (!groups.length) {
     throw new Error('timeline tidak punya file voice. Isi voice/ lalu jalankan: vigen timing');
   }
 
@@ -73,13 +101,13 @@ async function renderVoiceBus(cfg, projectDir, timeline, dir) {
   const parts = [];
   const labels = [];
 
-  scenes.forEach((s, i) => {
-    args.push('-i', path.join(projectDir, s.file));
-    parts.push(`[${i}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=${Math.round(s.start * 1000)}:all=1[v${i}]`);
+  groups.forEach((g, i) => {
+    args.push('-i', path.join(projectDir, g.file));
+    parts.push(`[${i}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=${Math.round(g.start * 1000)}:all=1[v${i}]`);
     labels.push(`[v${i}]`);
   });
 
-  parts.push(`${labels.join('')}amix=inputs=${scenes.length}:normalize=0:duration=longest,apad=whole_dur=${timeline.totalDuration}[out]`);
+  parts.push(`${labels.join('')}amix=inputs=${groups.length}:normalize=0:duration=longest,apad=whole_dur=${timeline.totalDuration}[out]`);
   args.push('-filter_complex', parts.join(';'), '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le', out);
   await runFfmpeg(cfg, args);
   return out;
@@ -97,8 +125,8 @@ async function renderMusic(cfg, musicFile, totalDuration, dir) {
 }
 
 function duckExpression(timeline) {
-  const active = timeline.scenes
-    .filter((s) => s.file && Number.isFinite(s.start) && Number.isFinite(s.end) && s.end > s.start)
+  const active = voiceGroups(timeline)
+    .filter((s) => Number.isFinite(s.start) && Number.isFinite(s.end) && s.end > s.start)
     .sort((a, b) => a.start - b.start);
   if (!active.length) return null;
 
