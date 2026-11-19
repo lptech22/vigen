@@ -65,7 +65,7 @@ function readFontDataUrl(file, label) {
   return `data:${mime};base64,${b64}`;
 }
 
-export async function launchBrowser(cfg, { width, height, stageUrl = null, postUrl = null }) {
+export async function launchBrowser(cfg, { width, height, stageUrl = null, postUrl = null, storyboard = null }) {
   const paths = runtimePaths(cfg);
   const profileDir = fs.mkdtempSync(path.join(ensureDir(path.join(paths.tmp, 'profile')), 'run-'));
   const args = [
@@ -113,10 +113,11 @@ export async function launchBrowser(cfg, { width, height, stageUrl = null, postU
       width,
       height,
       fps: cfg.output.fps,
-      duration: 5,
+      duration: storyboard?.duration ?? 5,
       watermark: cfg.brand?.watermark || 'LPTech',
       postUrl,
       fonts,
+      storyboard,
     };
 
     const bootRes = await session.send('Runtime.evaluate', {

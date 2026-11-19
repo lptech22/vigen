@@ -2,6 +2,30 @@
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), versi mengikuti [SemVer](https://semver.org/lang/id/).
 
+## [0.5.0] — 2026-11-19
+
+### Ditambahkan
+- `vigen render "<project>"`: storyboard → video, mux otomatis bila `out/audio.wav` ada; opsi `--capture`, `--chunk`, `--force`, `--no-retime`, `--no-audio`.
+- `vigen check "<project>"`: audit bounding box seluruh teks di setiap frame; `--step` dan `--json`.
+- `vigen still "<project>" --scene <id>`: render satu scene, sekaligus melaporkan pelanggaran safe area.
+- Storyboard `scene.js` v1: 8 tipe scene (`hook`, `fact`, `timeline`, `quote`, `stat`, `deadpan`, `punchline`, `outro`), 6 gag (`stamp`, `freeze-zoom`, `record-scratch`, `timeline-corrected`, `receipt`, `chat-bubble`).
+- Validasi skema + pemetaan timeline voice; durasi default per tipe; auto-outro 1,5 dtk.
+- Style `sejarah/sepia-archive`: tekstur kertas tua, debu deterministik, bingkai arsip, watermark.
+- Render membatalkan diri pada frame pertama yang teksnya keluar safe area.
+- `storyHash` pada state resume; perubahan storyboard membuang segmen lama.
+
+### Diperbaiki
+- `findByTimeline` memakai `tl.totalDuration` (array scene) sehingga `end` scene terakhir `NaN` dan scene tidak pernah digambar; kini `timeline.totalDuration` + penjaga rentang waktu.
+- Tata letak gag punchline: vinyl pindah ke pita atas, struk jadi lower-third, chat bubble menghindari kotak `aside`.
+- Padding audit 1px dihapus agar teks rata kiri tepat di x=84 tidak dianggap melanggar.
+- Template `vigen new` kini berisi contoh storyboard yang langsung lolos `vigen check`.
+
+### Teknis
+- Uji 8 scene: 417 frame / 13,900 dtk, 2.080 kotak teks, 0 pelanggaran.
+- Determinisme: render ulang `--force` → sha256 identik (`c869fe2c…86bd7`).
+- Throughput 5,7 fps PNG (176 ms/frame); 2,1 MB untuk 13,9 dtk.
+- Tetap tanpa dependensi npm.
+
 ## [0.4.0] — 2026-11-19
 
 ### Ditambahkan

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { loadConfig } from '../core/config.mjs';
 import {
   parseArgs, ensureDir, line, section, color, ok, bad, warn, info, humanBytes, nowStamp,
@@ -8,6 +9,7 @@ import { launchBrowser } from '../render/browser.mjs';
 import { startHost } from '../render/host.mjs';
 import { renderVideo } from '../render/render.mjs';
 import { concatSegments, probeVideo } from '../render/encode.mjs';
+import { demoStoryboard } from '../story/storyboard.mjs';
 
 export async function testCommand(argv) {
   const { flags } = parseArgs(argv);
@@ -26,6 +28,7 @@ export async function testCommand(argv) {
   const stopAt = flags['stop-at'] ? Number(flags['stop-at']) : null;
   const hashFile = flags['hash-file'] ? path.resolve(String(flags['hash-file'])) : null;
   const hashEvery = flags['hash-every'] ? Number(flags['hash-every']) : 0;
+  const storyboard = demoStoryboard(cfg, duration);
 
   line(`${color.bold('Vigen test')} ${color.gray(`— ${duration} dtk @ ${width}x${height} ${fps}fps · ${capture}`)}`);
   info(`output : ${out}`);
@@ -33,7 +36,9 @@ export async function testCommand(argv) {
   if (stopAt) warn(`mode uji resume: berhenti setelah ${stopAt} frame`);
 
   const host = await startHost({ onFrame: async () => {} });
-  const browser = await launchBrowser(cfg, { width, height, stageUrl: host.stageUrl, postUrl: host.postUrl });
+  const browser = await launchBrowser(cfg, {
+    width, height, stageUrl: host.stageUrl, postUrl: host.postUrl, storyboard,
+  });
 
   let result;
   const started = Date.now();
@@ -53,6 +58,7 @@ export async function testCommand(argv) {
         hashFile,
         capture,
         quiet: Boolean(flags.quiet),
+        storyHash: crypto.createHash('sha256').update(JSON.stringify(storyboard)).digest('hex').slice(0, 16),
       },
     });
   } finally {

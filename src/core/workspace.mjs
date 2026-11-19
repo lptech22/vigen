@@ -121,11 +121,54 @@ function scriptTemplate(slug) {
 }
 
 function sceneTemplate() {
-  return `export default {
+  return `// Storyboard Vigen. Semua teks wajib berada di safe area:
+// x 84..996, y 210..1580. Cek dengan: vigen check "<nama project>"
+export default {
   schema: 1,
   style: 'sejarah/sepia-archive',
   brand: { watermark: 'LPTech' },
-  scenes: [],
+  scenes: [
+    {
+      id: 's01',
+      type: 'hook',
+      kicker: 'SEJARAH · EP 01',
+      title: 'JUDUL EPISODE',
+      subtitle: 'SUBJUDUL · TAHUN',
+    },
+    {
+      id: 's02',
+      type: 'fact',
+      kicker: 'FAKTA',
+      title: 'Judul fakta yang bikin penasaran',
+      body: 'Satu paragraf singkat. Tulis apa adanya, jangan bertele-tele. '
+        + 'Angka dan tahun boleh ditonjolkan di scene lain.',
+      source: 'sumber: arsip · catatan',
+    },
+    {
+      id: 's03',
+      type: 'timeline',
+      kicker: 'GARIS WAKTU',
+      title: 'Urutan kejadian',
+      items: [
+        { year: '1511', text: 'Kejadian pertama.' },
+        { year: '1641', text: 'Kejadian kedua.' },
+        { year: '1824', text: 'Kejadian ketiga.' },
+      ],
+      correction: { was: '1512', year: '1511', text: 'Tahun yang benar.' },
+    },
+    {
+      id: 's04',
+      type: 'punchline',
+      setup: 'Dan bagian yang paling masuk akal:',
+      text: 'TIDAK ADA.',
+      pause: 0.4,
+      gag: { type: 'record-scratch', at: 0.2 },
+    },
+    {
+      id: 's05',
+      type: 'outro',
+    },
+  ],
 };
 `;
 }

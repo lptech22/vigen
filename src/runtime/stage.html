@@ -13,18 +13,30 @@
 <script>
 (() => {
   'use strict';
+
   const canvas = document.getElementById('stage');
   const ctx = canvas.getContext('2d', { alpha: false });
 
-  const PALETTE = {
-    bgTop: '#17110c',
-    bgBottom: '#241a11',
-    ink: '#f0e4c9',
-    inkSoft: 'rgba(240,228,201,0.72)',
+  const UI = 'VigenUI, sans-serif';
+  const DISPLAY = 'VigenDisplay, "DejaVu Serif", serif';
+
+  const C = {
+    bgTop: '#15100b',
+    bgMid: '#21170f',
+    bgBottom: '#2b1d13',
+    ink: '#f2e6c9',
+    inkSoft: 'rgba(242,230,201,0.72)',
+    inkFaint: 'rgba(242,230,201,0.40)',
     gold: '#c9a227',
-    goldSoft: 'rgba(201,162,39,0.55)',
-    line: 'rgba(240,228,201,0.16)',
+    goldSoft: 'rgba(201,162,39,0.45)',
+    line: 'rgba(242,230,201,0.16)',
+    stamp: '#b23b32',
+    paper: 'rgba(235,220,190,0.96)',
+    paperInk: '#332414',
+    paperInkSoft: '#5a432c',
   };
+
+  const FALLBACK_SAFE = { left: 84, right: 996, top: 210, bottom: 1580 };
 
   const state = {
     width: 1080,
@@ -33,182 +45,1045 @@
     duration: 5,
     watermark: 'LPTech',
     postUrl: null,
+    safe: FALLBACK_SAFE,
+    punchlinePause: 0.4,
+    storyboard: null,
+    boxes: [],
+    violations: [],
+    bg: null,
   };
 
+  // Petunjuk tata letak per scene, dipakai agar gag tidak menimpa teks.
+  const layout = { textBottom: 0 };
+
+  // ---------- utils deterministik ----------
   const clamp01 = (x) => Math.max(0, Math.min(1, x));
   const easeOut = (x) => 1 - Math.pow(1 - clamp01(x), 3);
   const easeInOut = (x) => {
     x = clamp01(x);
     return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
   };
-  // progres lokal: 0 sebelum start, 1 setelah start+dur
-  const span = (t, start, dur) => clamp01((t - start) / dur);
+  const span = (t, start, dur) => clamp01((t - start) / Math.max(0.0001, dur));
+  const hash = (n) => {
+    const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+    return x - Math.floor(x);
+  };
+  function mulberry32(a) {
+    return function rnd() {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
 
-  // ukuran font menyesuaikan lebar aman (deterministik, tanpa coba-coba)
-  function fitFont(text, base, maxWidth, family, weight = '700') {
+  // ---------- font & teks ----------
+  function setFont(size, weight, family, spacing) {
+    ctx.font = `${weight} ${size}px ${family}`;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = `${spacing || 0}px`;
+  }
+
+  function measure(text, size, weight, family, spacing) {
+    setFont(size, weight, family, spacing);
+    return ctx.measureText(String(text)).width;
+  }
+
+  function wrapText(text, maxWidth, spec) {
+    setFont(spec.size, spec.weight, spec.family, spec.spacing);
+    const out = [];
+    for (const para of String(text).split('\n')) {
+      const words = para.trim().split(/\s+/).filter(Boolean);
+      if (!words.length) { out.push(''); continue; }
+      let line = '';
+      for (const w of words) {
+        const test = line ? `${line} ${w}` : w;
+        if (!line || ctx.measureText(test).width <= maxWidth) line = test;
+        else { out.push(line); line = w; }
+      }
+      if (line) out.push(line);
+    }
+    return out.length ? out : [''];
+  }
+
+  function fitBlock(text, opts) {
+    const {
+      maxWidth, maxLines, base, min = 24, weight = '700',
+      family = DISPLAY, spacing = 0, lineHeight = 1.1,
+    } = opts;
+    let best = null;
+    for (let size = base; size >= min; size -= 2) {
+      const spec = { size, weight, family, spacing };
+      const lines = wrapText(text, maxWidth, spec);
+      let w = 0;
+      for (const l of lines) w = Math.max(w, measure(l, size, weight, family, spacing));
+      if (lines.length <= maxLines && w <= maxWidth + 0.5) {
+        best = { size, lines, lineHeight, width: w, height: lines.length * size * lineHeight };
+        break;
+      }
+    }
+    if (best) return best;
+    const spec = { size: min, weight, family, spacing };
+    const lines = wrapText(text, maxWidth, spec);
+    return {
+      size: min, lines, lineHeight,
+      width: maxWidth,
+      height: lines.length * min * lineHeight,
+    };
+  }
+
+  function recordBox(id, x, y, w, h) {
+    const m = ctx.getTransform();
+    const pts = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [px, py] of pts) {
+      const X = m.a * px + m.c * py + m.e;
+      const Y = m.b * px + m.d * py + m.f;
+      if (X < x0) x0 = X;
+      if (Y < y0) y0 = Y;
+      if (X > x1) x1 = X;
+      if (Y > y1) y1 = Y;
+    }
+    state.boxes.push({ id, x0, y0, x1, y1 });
+  }
+
+  function drawBlock(id, block, x, y, opts = {}) {
+    const {
+      align = 'left', baseline = 'top', color = C.ink, alpha = 1,
+      audit = true, weight = '700', family = DISPLAY, spacing = 0,
+    } = opts;
+    if (alpha <= 0.001 || !block || !block.lines.length) return;
+
+    const { size, lines, lineHeight } = block;
+    const totalH = lines.length * size * lineHeight;
+    let top = y;
+    if (baseline === 'middle') top = y - totalH / 2;
+    else if (baseline === 'bottom') top = y - totalH;
+
     ctx.save();
-    if ('letterSpacing' in ctx) ctx.letterSpacing = '4px';
-    ctx.font = `${weight} ${base}px ${family}`;
-    const w = ctx.measureText(text).width;
+    ctx.globalAlpha *= alpha;
+    setFont(size, weight, family, spacing);
+    ctx.fillStyle = color;
+    ctx.textAlign = align;
+    ctx.textBaseline = 'top';
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i], x, top + i * size * lineHeight);
+    }
+    if (audit) {
+      let w = 0;
+      for (const l of lines) w = Math.max(w, ctx.measureText(l).width);
+      const left = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+      recordBox(id, left, top, w, totalH * 0.98);
+    }
     ctx.restore();
-    if (w <= maxWidth) return base;
-    return Math.max(24, Math.floor((base * maxWidth) / w));
   }
 
-  function drawBackground(w, h) {
-    const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, PALETTE.bgTop);
-    g.addColorStop(1, PALETTE.bgBottom);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
-
-    const v = ctx.createRadialGradient(w / 2, h * 0.42, h * 0.1, w / 2, h * 0.5, h * 0.78);
-    v.addColorStop(0, 'rgba(255,236,196,0.055)');
-    v.addColorStop(0.55, 'rgba(0,0,0,0)');
-    v.addColorStop(1, 'rgba(0,0,0,0.55)');
-    ctx.fillStyle = v;
-    ctx.fillRect(0, 0, w, h);
-  }
-
-  function drawFrameBorder(w, h) {
-    const m = 40;
+  function drawRule(x, y, width, thickness, color, alpha = 1) {
+    if (width <= 0) return;
     ctx.save();
-    ctx.strokeStyle = PALETTE.line;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(m, m, w - m * 2, h - m * 2);
+    ctx.globalAlpha *= alpha;
+    ctx.fillStyle = color;
+    ctx.fillRect(x - width / 2, y, width, thickness);
     ctx.restore();
   }
 
-  function drawWatermark(w, h) {
+  function drawKicker(id, text, x, y, opts = {}) {
+    if (!text) return;
+    const block = {
+      size: opts.size || 26,
+      lines: [String(text).toUpperCase()],
+      lineHeight: 1.2,
+    };
+    drawBlock(id, block, x, y, {
+      align: opts.align || 'center',
+      baseline: 'middle',
+      color: opts.color || C.gold,
+      alpha: opts.alpha ?? 1,
+      weight: '600',
+      family: UI,
+      spacing: opts.spacing ?? 6,
+    });
+  }
+
+  function roundRect(x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.lineTo(x + w - rr, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+    ctx.lineTo(x + w, y + h - rr);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+    ctx.lineTo(x + rr, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+    ctx.lineTo(x, y + rr);
+    ctx.quadraticCurveTo(x, y, x + rr, y);
+    ctx.closePath();
+  }
+
+  // ---------- background arsip ----------
+  function buildBackground(w, h) {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const g = c.getContext('2d');
+
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, C.bgTop);
+    grad.addColorStop(0.55, C.bgMid);
+    grad.addColorStop(1, C.bgBottom);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, w, h);
+
+    const glow = g.createRadialGradient(w * 0.5, h * 0.36, 30, w * 0.5, h * 0.48, h * 0.78);
+    glow.addColorStop(0, 'rgba(255,226,172,0.10)');
+    glow.addColorStop(0.52, 'rgba(255,220,160,0.02)');
+    glow.addColorStop(1, 'rgba(0,0,0,0.58)');
+    g.fillStyle = glow;
+    g.fillRect(0, 0, w, h);
+
+    const rnd = mulberry32(0x5e9a2026);
+    // bercak kertas tua
+    for (let i = 0; i < 90; i++) {
+      const x = rnd() * w;
+      const y = rnd() * h;
+      const r = 40 + rnd() * 230;
+      const a = 0.015 + rnd() * 0.035;
+      const blob = g.createRadialGradient(x, y, 0, x, y, r);
+      blob.addColorStop(0, `rgba(0,0,0,${a})`);
+      blob.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = blob;
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+    }
+    // serat & debu statis
+    for (let i = 0; i < 4600; i++) {
+      const x = rnd() * w;
+      const y = rnd() * h;
+      const a = 0.012 + rnd() * 0.05;
+      g.fillStyle = rnd() > 0.45 ? `rgba(244,229,196,${a})` : `rgba(0,0,0,${a})`;
+      const s = rnd() > 0.93 ? 2 : 1;
+      g.fillRect(x, y, s, s);
+    }
+    // bingkai arsip
+    g.strokeStyle = 'rgba(242,230,201,0.14)';
+    g.lineWidth = 2;
+    g.strokeRect(40, 40, w - 80, h - 80);
+    g.strokeStyle = 'rgba(201,162,39,0.32)';
+    g.lineWidth = 1;
+    g.strokeRect(52, 52, w - 104, h - 104);
+
+    // sudut arsip
+    g.strokeStyle = 'rgba(201,162,39,0.45)';
+    g.lineWidth = 3;
+    const m = 68, len = 46;
+    const corners = [
+      [m, m, 1, 1], [w - m, m, -1, 1],
+      [m, h - m, 1, -1], [w - m, h - m, -1, -1],
+    ];
+    for (const [x, y, sx, sy] of corners) {
+      g.beginPath();
+      g.moveTo(x, y + sy * len);
+      g.lineTo(x, y);
+      g.lineTo(x + sx * len, y);
+      g.stroke();
+    }
+
+    state.bg = c;
+  }
+
+  function drawDust(t) {
+    const w = state.width;
+    const h = state.height;
+    for (let i = 0; i < 16; i++) {
+      const seed = i * 7.13;
+      const x = ((hash(seed) * (w + 80) + t * (4 + hash(seed + 2) * 14)) % (w + 80)) - 40;
+      const y = (hash(seed + 5) * h + Math.sin(t * 0.4 + seed) * 14 + h) % h;
+      const a = 0.025 + hash(seed + 9) * 0.07;
+      ctx.fillStyle = `rgba(242,230,201,${a})`;
+      ctx.beginPath();
+      ctx.arc(x, y, 1 + hash(seed + 1) * 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawWatermark() {
+    const w = state.width;
+    const h = state.height;
+    if (!state.watermark) return;
     ctx.save();
-    ctx.font = '400 28px VigenUI, sans-serif';
-    ctx.fillStyle = 'rgba(240,228,201,0.38)';
+    setFont(26, '400', UI, 2);
+    ctx.fillStyle = 'rgba(242,230,201,0.38)';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'alphabetic';
-    if ('letterSpacing' in ctx) ctx.letterSpacing = '2px';
-    ctx.fillText(state.watermark, w - 64, h - 64);
+    ctx.fillText(state.watermark, w - 84, h - 270);
     ctx.restore();
   }
 
-  function drawProgress(w, h, t) {
-    const p = clamp01(t / state.duration);
+  function drawProgress(t) {
+    const w = state.width;
+    const h = state.height;
+    const p = clamp01(t / Math.max(0.001, state.duration));
     ctx.save();
-    ctx.fillStyle = 'rgba(201,162,39,0.20)';
-    ctx.fillRect(64, h - 96, w - 128, 3);
-    ctx.fillStyle = PALETTE.gold;
-    ctx.fillRect(64, h - 96, (w - 128) * p, 3);
+    ctx.fillStyle = 'rgba(201,162,39,0.18)';
+    ctx.fillRect(84, h - 122, w - 168, 3);
+    ctx.fillStyle = C.gold;
+    ctx.fillRect(84, h - 122, (w - 168) * p, 3);
     ctx.restore();
+  }
+
+  // ---------- scene ----------
+  function sceneFade(sc, u) {
+    const inP = easeOut(span(u, 0, 0.16));
+    if (sc.type === 'outro') return inP;
+    const outP = 1 - easeInOut(span(u, sc.duration - 0.08, 0.08));
+    return Math.min(inP, outP);
+  }
+
+  function sceneHook(sc, u) {
+    const fade = easeOut(span(u, 0, 0.5));
+    drawKicker(`${sc.id}:kicker`, sc.kicker || '', 540, 324, { alpha: fade });
+
+    if (sc.title) {
+      const title = fitBlock(sc.title, {
+        maxWidth: 860, maxLines: 3, base: 196, min: 72, lineHeight: 1.04, spacing: 2,
+      });
+      const top = 500 + Math.max(0, (580 - title.height) / 2);
+      const rise = (1 - easeOut(span(u, 0, 0.7))) * 52;
+      drawBlock(`${sc.id}:title`, title, 540, top + rise, {
+        align: 'center', color: C.ink, alpha: fade, spacing: 2,
+      });
+    }
+
+    const ruleP = easeInOut(span(u, 0.55, 0.7));
+    drawRule(540, 1136, 270 * ruleP, 3, C.gold, 0.9);
+
+    if (sc.subtitle) {
+      const sub = fitBlock(sc.subtitle, {
+        maxWidth: 820, maxLines: 2, base: 46, min: 26, lineHeight: 1.25,
+        weight: '400', family: UI, spacing: 3,
+      });
+      const p = easeOut(span(u, 0.75, 0.5));
+      drawBlock(`${sc.id}:subtitle`, sub, 540, 1192 + (1 - p) * 26, {
+        align: 'center', color: C.inkSoft, alpha: p, weight: '400', family: UI, spacing: 3,
+      });
+    }
+
+    if (sc.source) {
+      const src = fitBlock(sc.source, {
+        maxWidth: 760, maxLines: 2, base: 24, min: 20, lineHeight: 1.3,
+        weight: '400', family: UI,
+      });
+      drawBlock(`${sc.id}:source`, src, 540, 1480, {
+        align: 'center', color: C.inkFaint, alpha: fade, weight: '400', family: UI,
+      });
+    }
+  }
+
+  function sceneFact(sc, u) {
+    const fade = easeOut(span(u, 0, 0.35));
+    drawKicker(`${sc.id}:kicker`, sc.kicker || 'FAKTA', 84, 306, {
+      align: 'left', alpha: fade, spacing: 7,
+    });
+
+    let y = 386;
+    if (sc.title) {
+      const title = fitBlock(sc.title, {
+        maxWidth: 912, maxLines: 3, base: 84, min: 42, lineHeight: 1.1,
+      });
+      drawBlock(`${sc.id}:title`, title, 84, y, { color: C.ink, alpha: fade });
+      y += title.height + 52;
+    }
+
+    if (sc.body) {
+      const body = fitBlock(sc.body, {
+        maxWidth: 900, maxLines: 8, base: 46, min: 28, lineHeight: 1.42,
+        weight: '400', family: UI,
+      });
+      const p = easeOut(span(u, 0.18, 0.5));
+      drawBlock(`${sc.id}:body`, body, 84, y + (1 - p) * 22, {
+        color: C.inkSoft, alpha: p, weight: '400', family: UI,
+      });
+    }
+
+    if (sc.source) {
+      const src = fitBlock(sc.source, {
+        maxWidth: 820, maxLines: 2, base: 24, min: 20, lineHeight: 1.3,
+        weight: '400', family: UI,
+      });
+      drawBlock(`${sc.id}:source`, src, 84, 1500, {
+        color: C.inkFaint, alpha: fade, weight: '400', family: UI,
+      });
+    }
+  }
+
+  function sceneTimeline(sc, u) {
+    const fade = easeOut(span(u, 0, 0.35));
+    drawKicker(`${sc.id}:kicker`, sc.kicker || 'GARIS WAKTU', 84, 306, {
+      align: 'left', alpha: fade, spacing: 7,
+    });
+
+    if (sc.title) {
+      const title = fitBlock(sc.title, {
+        maxWidth: 912, maxLines: 2, base: 66, min: 38, lineHeight: 1.1,
+      });
+      drawBlock(`${sc.id}:title`, title, 84, 370, { color: C.ink, alpha: fade });
+    }
+
+    const items = Array.isArray(sc.items) ? sc.items.slice(0, sc.correction ? 3 : 4) : [];
+    const rowH = 200;
+    const startY = 520;
+    const lineX = 276;
+
+    if (items.length) {
+      const lineP = easeInOut(span(u, 0.15, 0.7));
+      const lineH = (items.length - 1) * rowH;
+      ctx.save();
+      ctx.fillStyle = 'rgba(201,162,39,0.30)';
+      ctx.fillRect(lineX - 1, startY + 34, 2, lineH * lineP);
+      ctx.restore();
+
+      items.forEach((item, i) => {
+        const p = easeOut(span(u, 0.2 + i * 0.16, 0.45));
+        if (p <= 0) return;
+        const y = startY + i * rowH;
+        const year = fitBlock(String(item.year ?? ''), {
+          maxWidth: 170, maxLines: 1, base: 38, min: 22, lineHeight: 1,
+        });
+        drawBlock(`${sc.id}:year${i}`, year, 240, y, {
+          align: 'right', color: C.gold, alpha: p, spacing: 1,
+        });
+        const text = fitBlock(String(item.text ?? ''), {
+          maxWidth: 620, maxLines: 2, base: 36, min: 24, lineHeight: 1.32,
+          weight: '400', family: UI,
+        });
+        drawBlock(`${sc.id}:item${i}`, text, 320, y - 2, {
+          color: C.ink, alpha: p, weight: '400', family: UI,
+        });
+        ctx.save();
+        ctx.globalAlpha *= p;
+        ctx.fillStyle = C.gold;
+        ctx.beginPath();
+        ctx.arc(lineX, y + 20, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+    }
+
+    if (sc.correction) {
+      const p = easeOut(span(u, 0.55, 0.5));
+      const top = startY + items.length * rowH + 18;
+      const h = 176;
+      ctx.save();
+      ctx.globalAlpha *= p;
+      ctx.fillStyle = 'rgba(178,59,50,0.08)';
+      ctx.fillRect(84, top, 912, h);
+      ctx.strokeStyle = 'rgba(178,59,50,0.65)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(84, top, 912, h);
+      ctx.restore();
+
+      const oldYear = String(sc.correction.was ?? '');
+      if (oldYear) {
+        const oldBlock = fitBlock(oldYear, {
+          maxWidth: 240, maxLines: 1, base: 36, min: 22, lineHeight: 1,
+        });
+        drawBlock(`${sc.id}:corr-old`, oldBlock, 120, top + 58, {
+          color: C.inkFaint, alpha: p, spacing: 1,
+        });
+        const w = oldBlock.width || 100;
+        ctx.save();
+        ctx.globalAlpha *= p;
+        ctx.strokeStyle = C.stamp;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(118, top + 74);
+        ctx.lineTo(122 + w, top + 74);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      const newBlock = fitBlock(String(sc.correction.year ?? ''), {
+        maxWidth: 240, maxLines: 1, base: 40, min: 22, lineHeight: 1,
+      });
+      drawBlock(`${sc.id}:corr-year`, newBlock, 120, top + 104, {
+        color: C.gold, alpha: p, spacing: 1,
+      });
+
+      const text = fitBlock(String(sc.correction.text ?? ''), {
+        maxWidth: 600, maxLines: 2, base: 32, min: 22, lineHeight: 1.3,
+        weight: '400', family: UI,
+      });
+      drawBlock(`${sc.id}:corr-text`, text, 400, top + 58, {
+        color: C.ink, alpha: p, weight: '400', family: UI,
+      });
+      drawBlock(`${sc.id}:corr-tag`, {
+        size: 24, lines: ['KOREKSI'], lineHeight: 1.1,
+      }, 908, top + 24, {
+        align: 'right', color: C.stamp, alpha: p, weight: '700', family: UI, spacing: 4,
+      });
+    }
+  }
+
+  function sceneQuote(sc, u) {
+    const fade = easeOut(span(u, 0, 0.45));
+    ctx.save();
+    ctx.globalAlpha *= fade * 0.42;
+    setFont(220, '700', DISPLAY, 0);
+    ctx.fillStyle = C.gold;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('\u201C', 118, 388);
+    ctx.restore();
+
+    const quote = fitBlock(String(sc.quote || sc.text || ''), {
+      maxWidth: 840, maxLines: 6, base: 60, min: 32, lineHeight: 1.3,
+    });
+    const top = 516;
+    drawBlock(`${sc.id}:quote`, quote, 540, top, {
+      align: 'center', color: C.ink, alpha: fade,
+    });
+
+    const ruleP = easeInOut(span(u, 0.5, 0.6));
+    drawRule(540, top + quote.height + 56, 160 * ruleP, 3, C.gold, 0.85);
+
+    if (sc.by) {
+      const by = fitBlock(sc.by, {
+        maxWidth: 760, maxLines: 2, base: 34, min: 22, lineHeight: 1.3,
+        weight: '400', family: UI, spacing: 2,
+      });
+      drawBlock(`${sc.id}:by`, by, 540, top + quote.height + 102, {
+        align: 'center', color: C.gold, alpha: easeOut(span(u, 0.65, 0.5)),
+        weight: '400', family: UI, spacing: 2,
+      });
+    }
+  }
+
+  function sceneStat(sc, u) {
+    const fade = easeOut(span(u, 0, 0.4));
+    drawKicker(`${sc.id}:kicker`, sc.kicker || 'ANGKA', 540, 340, { alpha: fade });
+
+    if (sc.value !== undefined) {
+      const value = fitBlock(String(sc.value), {
+        maxWidth: 900, maxLines: 1, base: 286, min: 96, lineHeight: 1, spacing: 1,
+      });
+      const p = easeOut(span(u, 0.05, 0.55));
+      const scale = 0.96 + 0.04 * p;
+      ctx.save();
+      ctx.translate(540, 700);
+      ctx.scale(scale, scale);
+      ctx.translate(-540, -700);
+      drawBlock(`${sc.id}:value`, value, 540, 700, {
+        align: 'center', baseline: 'middle', color: C.gold, alpha: p, spacing: 1,
+      });
+      ctx.restore();
+    }
+
+    if (sc.unit) {
+      const unit = fitBlock(sc.unit, {
+        maxWidth: 760, maxLines: 1, base: 50, min: 26, lineHeight: 1.1,
+        weight: '400', family: UI, spacing: 5,
+      });
+      drawBlock(`${sc.id}:unit`, unit, 540, 900, {
+        align: 'center', color: C.ink, alpha: easeOut(span(u, 0.25, 0.45)),
+        weight: '400', family: UI, spacing: 5,
+      });
+    }
+
+    if (sc.label) {
+      const label = fitBlock(sc.label, {
+        maxWidth: 840, maxLines: 3, base: 42, min: 26, lineHeight: 1.35,
+        weight: '400', family: UI,
+      });
+      drawBlock(`${sc.id}:label`, label, 540, 1010, {
+        align: 'center', color: C.inkSoft, alpha: easeOut(span(u, 0.4, 0.5)),
+        weight: '400', family: UI,
+      });
+    }
+
+    if (sc.source) {
+      const src = fitBlock(sc.source, {
+        maxWidth: 760, maxLines: 2, base: 24, min: 20, lineHeight: 1.3,
+        weight: '400', family: UI,
+      });
+      drawBlock(`${sc.id}:source`, src, 540, 1490, {
+        align: 'center', color: C.inkFaint, alpha: fade, weight: '400', family: UI,
+      });
+    }
+  }
+
+  function sceneDeadpan(sc, u) {
+    const fade = easeOut(span(u, 0, 0.4));
+    drawKicker(`${sc.id}:kicker`, sc.kicker || 'CATATAN', 84, 306, {
+      align: 'left', alpha: fade, spacing: 7,
+    });
+
+    const text = fitBlock(String(sc.text || sc.body || ''), {
+      maxWidth: 860, maxLines: 7, base: 52, min: 28, lineHeight: 1.38,
+      weight: '400', family: UI,
+    });
+    drawBlock(`${sc.id}:text`, text, 540, 560, {
+      align: 'center', color: C.ink, alpha: easeOut(span(u, 0.12, 0.5)),
+      weight: '400', family: UI,
+    });
+
+    if (sc.aside) {
+      const p = easeOut(span(u, 0.55, 0.5));
+      const aside = fitBlock(sc.aside, {
+        maxWidth: 780, maxLines: 3, base: 30, min: 22, lineHeight: 1.35,
+        weight: '400', family: UI,
+      });
+      const h = aside.height + 56;
+      const top = 1360 - h / 2;
+      layout.asideTop = top;
+      ctx.save();
+      ctx.globalAlpha *= p;
+      ctx.strokeStyle = 'rgba(201,162,39,0.35)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(130, top, 820, h);
+      ctx.restore();
+      drawBlock(`${sc.id}:aside`, aside, 540, top + 28, {
+        align: 'center', color: C.inkSoft, alpha: p, weight: '400', family: UI,
+      });
+    }
+  }
+
+  function scenePunchline(sc, u) {
+    const fade = easeOut(span(u, 0, 0.3));
+    if (sc.setup) {
+      const setup = fitBlock(sc.setup, {
+        maxWidth: 820, maxLines: 3, base: 42, min: 26, lineHeight: 1.35,
+        weight: '400', family: UI,
+      });
+      drawBlock(`${sc.id}:setup`, setup, 540, 500, {
+        align: 'center', color: C.inkSoft, alpha: fade, weight: '400', family: UI,
+      });
+    }
+
+    const beat = Number(sc.pause ?? state.punchlinePause);
+    const p = easeOut(span(u, beat, 0.5));
+    if (sc.text || sc.title) {
+      const text = fitBlock(String(sc.text || sc.title), {
+        maxWidth: 860, maxLines: 3, base: 110, min: 48, lineHeight: 1.08, spacing: 1,
+      });
+      const top = 770 + (1 - p) * 42;
+      drawBlock(`${sc.id}:text`, text, 540, top, {
+        align: 'center', color: C.ink, alpha: p, spacing: 1,
+      });
+      drawRule(540, top + text.height + 34, 220 * p, 4, C.stamp, 0.9 * p);
+      layout.textBottom = top + text.height + 46;
+    }
+  }
+
+  function sceneOutro(sc, u) {
+    const fade = easeOut(span(u, 0, 0.45));
+    const out = 1 - easeInOut(span(u, sc.duration - 0.4, 0.4));
+    const a = Math.min(fade, out);
+
+    ctx.save();
+    ctx.globalAlpha *= easeOut(span(u, 0, 0.3));
+    ctx.fillStyle = 'rgba(10,7,4,0.58)';
+    ctx.fillRect(0, 0, state.width, state.height);
+    ctx.restore();
+
+    const brand = fitBlock(state.watermark || 'LPTech', {
+      maxWidth: 760, maxLines: 1, base: 116, min: 60, lineHeight: 1, spacing: 2,
+    });
+    drawBlock(`${sc.id}:brand`, brand, 540, 790, {
+      align: 'center', baseline: 'middle', color: C.ink, alpha: a, spacing: 2,
+    });
+    drawRule(540, 900, 210 * easeInOut(span(u, 0.25, 0.6)), 3, C.gold, a);
+
+    drawBlock(`${sc.id}:tagline`, {
+      size: 34, lines: ['video generator by LPTech'], lineHeight: 1.3,
+    }, 540, 980, {
+      align: 'center', color: C.inkSoft, alpha: a, weight: '400', family: UI, spacing: 2,
+    });
+
+    drawBlock(`${sc.id}:niche`, {
+      size: 26, lines: ['sejarah · deadpan-sarkas'], lineHeight: 1.3,
+    }, 540, 1060, {
+      align: 'center', color: C.gold, alpha: a * 0.9, weight: '400', family: UI, spacing: 4,
+    });
+  }
+
+  // ---------- gags ----------
+  function gagStamp(sc, g, u, p) {
+    const pos = g.pos || 'center';
+    const x = Number(g.x ?? 540);
+    const y = Number(g.y ?? (pos === 'top' ? 560 : pos === 'bottom' ? 1360 : 1120));
+    const scale = 1.65 - 0.65 * easeOut(p);
+    const alpha = easeOut(p);
+    const w = 460;
+    const h = 176;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(g.rotate !== undefined ? Number(g.rotate) : -0.12);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha *= alpha;
+    ctx.strokeStyle = C.stamp;
+    ctx.lineWidth = 6;
+    ctx.strokeRect(-w / 2, -h / 2, w, h);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-w / 2 + 11, -h / 2 + 11, w - 22, h - 22);
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(g.rotate !== undefined ? Number(g.rotate) : -0.12);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha *= alpha;
+    const main = fitBlock(String(g.text || 'FAKTA'), {
+      maxWidth: w - 60, maxLines: 1, base: 64, min: 30, lineHeight: 1, spacing: 2,
+    });
+    drawBlock(`${sc.id}:stamp-main`, main, 0, -22, {
+      align: 'center', baseline: 'middle', color: C.stamp, spacing: 2,
+    });
+    if (g.sub) {
+      drawBlock(`${sc.id}:stamp-sub`, {
+        size: 23, lines: [String(g.sub)], lineHeight: 1.1,
+      }, 0, 48, {
+        align: 'center', baseline: 'middle', color: C.stamp,
+        weight: '400', family: UI, spacing: 3,
+      });
+    }
+    ctx.restore();
+  }
+
+  function gagRecordScratch(sc, g, u, p) {
+    const r = 84;
+    const cx = Number(g.x ?? (state.safe.right - r - 12));
+    const cy = Number(g.y ?? (state.safe.top + r + 12));
+    const a = easeOut(p);
+    const wobble = Math.sin(u * 22) * 0.03 * (1 - a);
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(0.35 + wobble + easeOut(p) * 0.25);
+    ctx.globalAlpha *= a;
+    ctx.fillStyle = '#0d0a08';
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    for (let i = 1; i <= 7; i++) {
+      ctx.strokeStyle = `rgba(242,230,201,${0.10 + i * 0.012})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * (i / 8), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = C.gold;
+    ctx.beginPath();
+    ctx.arc(0, 0, 34, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0d0a08';
+    ctx.beginPath();
+    ctx.arc(0, 0, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = C.stamp;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.85, -r * 0.3);
+    ctx.lineTo(-20, -8);
+    ctx.lineTo(26, 16);
+    ctx.lineTo(r * 0.9, r * 0.42);
+    ctx.stroke();
+    ctx.restore();
+
+    drawBlock(`${sc.id}:scratch-label`, {
+      size: 20, lines: ['REKAMAN BERHENTI'], lineHeight: 1.2,
+    }, state.safe.right - 12, cy + r + 16, {
+      align: 'right', color: C.stamp, alpha: a, weight: '700', family: UI, spacing: 2,
+    });
+  }
+
+  function gagFreezeFrame(sc, g, u, p) {
+    const x = 130, y = 420, w = 820, h = 880;
+    const a = easeOut(p);
+    ctx.save();
+    ctx.globalAlpha *= a;
+    ctx.strokeStyle = C.gold;
+    ctx.lineWidth = 3;
+    const len = 64;
+    const pts = [
+      [x, y, 1, 1], [x + w, y, -1, 1],
+      [x, y + h, 1, -1], [x + w, y + h, -1, -1],
+    ];
+    for (const [px, py, sx, sy] of pts) {
+      ctx.beginPath();
+      ctx.moveTo(px, py + sy * len);
+      ctx.lineTo(px, py);
+      ctx.lineTo(px + sx * len, py);
+      ctx.stroke();
+    }
+    ctx.restore();
+    drawBlock(`${sc.id}:freeze-tag`, {
+      size: 24, lines: ['FREEZE'], lineHeight: 1.2,
+    }, x, y - 34, {
+      align: 'left', color: C.gold, alpha: a, weight: '600', family: UI, spacing: 6,
+    });
+  }
+
+  function gagCorrectionTag(sc, g, u, p) {
+    gagStamp(sc, { ...g, text: g.text || 'KOREKSI', sub: g.sub || 'data diperbarui', y: g.y ?? 1372 }, u, p);
+  }
+
+  function gagReceipt(sc, g, u, p) {
+    const rows = Array.isArray(g.rows) ? g.rows : [];
+    const hasTotal = g.total !== undefined && g.total !== null;
+    const rowH = 54;
+    const headerH = 92;
+    const totalH = hasTotal ? 84 : 0;
+    const w = 720;
+    const h = headerH + rows.length * rowH + totalH + 46;
+    const limit = state.safe.bottom - h - 20;
+    const floor = layout.textBottom ? layout.textBottom + 24 : 340;
+    let top = state.safe.bottom - h - 40;
+    if (top < floor) top = Math.min(floor, limit);
+    if (top < state.safe.top) top = state.safe.top + 10;
+    const a = easeOut(p);
+    const rise = (1 - a) * 34;
+
+    ctx.save();
+    ctx.translate(540, top + rise);
+    ctx.rotate(-0.022);
+    ctx.globalAlpha *= a;
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    roundRect(-w / 2 + 10, 10, w, h, 8);
+    ctx.fill();
+    ctx.fillStyle = C.paper;
+    roundRect(-w / 2, 0, w, h, 8);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(540, top + rise);
+    ctx.rotate(-0.022);
+    ctx.globalAlpha *= a;
+
+    drawBlock(`${sc.id}:receipt-title`, {
+      size: 30, lines: [String(g.title || 'CATATAN').toUpperCase()], lineHeight: 1.2,
+    }, 0, 34, {
+      align: 'center', color: C.paperInk, weight: '700', family: UI, spacing: 5,
+    });
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(51,36,20,0.35)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(-w / 2 + 42, headerH - 18);
+    ctx.lineTo(w / 2 - 42, headerH - 18);
+    ctx.stroke();
+    ctx.restore();
+
+    rows.forEach((row, i) => {
+      const label = Array.isArray(row) ? row[0] : row.label;
+      const value = Array.isArray(row) ? row[1] : row.value;
+      const y = headerH + i * rowH;
+      drawBlock(`${sc.id}:receipt-l${i}`, {
+        size: 26, lines: [String(label ?? '')], lineHeight: 1.2,
+      }, -w / 2 + 48, y, {
+        align: 'left', color: C.paperInk, weight: '400', family: UI,
+      });
+      drawBlock(`${sc.id}:receipt-v${i}`, {
+        size: 26, lines: [String(value ?? '')], lineHeight: 1.2,
+      }, w / 2 - 48, y, {
+        align: 'right', color: C.paperInk, weight: '700', family: UI,
+      });
+    });
+
+    if (hasTotal) {
+      const y = headerH + rows.length * rowH + 24;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(51,36,20,0.55)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-w / 2 + 42, y - 18);
+      ctx.lineTo(w / 2 - 42, y - 18);
+      ctx.stroke();
+      ctx.restore();
+      drawBlock(`${sc.id}:receipt-total-l`, {
+        size: 28, lines: ['TOTAL'], lineHeight: 1.2,
+      }, -w / 2 + 48, y, {
+        align: 'left', color: C.paperInk, weight: '700', family: UI, spacing: 3,
+      });
+      drawBlock(`${sc.id}:receipt-total-v`, {
+        size: 30, lines: [String(g.total)], lineHeight: 1.2,
+      }, w / 2 - 48, y, {
+        align: 'right', color: C.paperInk, weight: '700', family: UI,
+      });
+    }
+    ctx.restore();
+  }
+
+  function gagChatBubble(sc, g, u, p) {
+    const text = String(g.text || '');
+    const name = g.name ? String(g.name) : '';
+    const side = g.side === 'right';
+    const maxW = 720;
+    const block = fitBlock(text, {
+      maxWidth: maxW - 64, maxLines: 5, base: 36, min: 24, lineHeight: 1.34,
+      weight: '400', family: UI,
+    });
+    const w = Math.min(maxW, block.width + 64);
+    const h = block.height + 56;
+    const x = side ? state.safe.right - w : state.safe.left;
+    const maxY = (layout.asideTop || state.safe.bottom) - h - 34;
+    const y = Number(g.y ?? Math.max(900, Math.min(1110, maxY)));
+    const a = easeOut(p);
+    const scale = 0.94 + 0.06 * a;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha *= a;
+    if (name) {
+      ctx.save();
+      setFont(24, '600', UI, 2);
+      ctx.fillStyle = C.gold;
+      ctx.textAlign = side ? 'right' : 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(name, side ? w : 0, -18);
+      ctx.restore();
+    }
+    ctx.fillStyle = C.paper;
+    roundRect(0, 0, w, h, 26);
+    ctx.fill();
+    ctx.beginPath();
+    if (side) {
+      ctx.moveTo(w - 52, h - 2);
+      ctx.lineTo(w - 30, h + 22);
+      ctx.lineTo(w - 84, h - 2);
+    } else {
+      ctx.moveTo(52, h - 2);
+      ctx.lineTo(30, h + 22);
+      ctx.lineTo(84, h - 2);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha *= a;
+    drawBlock(`${sc.id}:bubble-text`, block, 32, 28, {
+      color: C.paperInk, weight: '400', family: UI,
+    });
+    ctx.restore();
+  }
+
+  function drawGags(sc, u) {
+    for (const g of sc.gags || []) {
+      let at = g.at !== undefined ? Number(g.at) : 0;
+      if (!Number.isFinite(at)) at = 0;
+      if (sc.type === 'punchline') at += Number(sc.pause ?? state.punchlinePause);
+      if (u < at) continue;
+      const p = span(u, at, 0.34);
+      if (g.type === 'stamp') gagStamp(sc, g, u, p);
+      else if (g.type === 'record-scratch') gagRecordScratch(sc, g, u, p);
+      else if (g.type === 'freeze-zoom') gagFreezeFrame(sc, g, u, p);
+      else if (g.type === 'timeline-corrected') gagCorrectionTag(sc, g, u, p);
+      else if (g.type === 'receipt') gagReceipt(sc, g, u, p);
+      else if (g.type === 'chat-bubble') gagChatBubble(sc, g, u, p);
+    }
+  }
+
+  function sceneZoom(sc, u) {
+    const fz = (sc.gags || []).find((g) => g.type === 'freeze-zoom');
+    if (!fz) return 1;
+    const at = Number(fz.at ?? 0);
+    const to = Number(fz.to ?? 1.08);
+    const p = easeInOut(span(u, at, Math.max(0.3, sc.duration - at)));
+    return 1 + (to - 1) * p;
+  }
+
+  function drawScene(sc, u) {
+    const zoom = sceneZoom(sc, u);
+    layout.textBottom = 0;
+    layout.asideTop = 0;
+    ctx.save();
+    if (zoom !== 1) {
+      ctx.translate(540, 880);
+      ctx.scale(zoom, zoom);
+      ctx.translate(-540, -880);
+    }
+    if (sc.type === 'hook') sceneHook(sc, u);
+    else if (sc.type === 'fact') sceneFact(sc, u);
+    else if (sc.type === 'timeline') sceneTimeline(sc, u);
+    else if (sc.type === 'quote') sceneQuote(sc, u);
+    else if (sc.type === 'stat') sceneStat(sc, u);
+    else if (sc.type === 'deadpan') sceneDeadpan(sc, u);
+    else if (sc.type === 'punchline') scenePunchline(sc, u);
+    else if (sc.type === 'outro') sceneOutro(sc, u);
+    ctx.restore();
+    if (zoom !== 1) {
+      if (layout.textBottom) layout.textBottom = 880 + (layout.textBottom - 880) * zoom;
+      if (layout.asideTop) layout.asideTop = 880 + (layout.asideTop - 880) * zoom;
+    }
+    drawGags(sc, u);
+  }
+
+  // ---------- frame ----------
+  function audit() {
+    const s = state.safe;
+    const out = [];
+    for (const b of state.boxes) {
+      const over = [];
+      if (b.x0 < s.left) over.push(`kiri ${Math.round(s.left - b.x0)}px`);
+      if (b.x1 > s.right) over.push(`kanan ${Math.round(b.x1 - s.right)}px`);
+      if (b.y0 < s.top) over.push(`atas ${Math.round(s.top - b.y0)}px`);
+      if (b.y1 > s.bottom) over.push(`bawah ${Math.round(b.y1 - s.bottom)}px`);
+      if (over.length) out.push({ ...b, over });
+    }
+    state.violations = out;
   }
 
   function draw(t) {
     const w = state.width;
     const h = state.height;
-    const cx = w / 2;
-    const cy = h * 0.47;
+    state.boxes = [];
 
-    drawBackground(w, h);
-    drawFrameBorder(w, h);
+    if (state.bg) ctx.drawImage(state.bg, 0, 0);
+    else {
+      ctx.fillStyle = C.bgTop;
+      ctx.fillRect(0, 0, w, h);
+    }
+    drawDust(t);
 
-    // grup utama bergerak halus (parallax deterministik)
-    const drift = -6 * clamp01(t / state.duration);
-
-    // label atas
-    const labelP = easeOut(span(t, 0.15, 0.5));
-    if (labelP > 0) {
+    const scenes = state.storyboard?.scenes || [];
+    const active = scenes.filter((s) => t >= s.start && t < s.end);
+    if (!active.length && scenes.length) {
+      const last = scenes[scenes.length - 1];
+      if (t >= last.end) active.push(last);
+    }
+    for (const sc of active) {
+      const u = t - sc.start;
       ctx.save();
-      ctx.globalAlpha = 0.85 * labelP;
-      ctx.font = '600 27px VigenUI, sans-serif';
-      ctx.fillStyle = PALETTE.gold;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'alphabetic';
-      if ('letterSpacing' in ctx) ctx.letterSpacing = '7px';
-      ctx.fillText('SEJARAH  ·  EP 01', cx, cy - 205 + drift);
+      ctx.globalAlpha *= sceneFade(sc, u);
+      drawScene(sc, u);
       ctx.restore();
     }
 
-    // judul besar
-    const titleP = easeOut(span(t, 0.0, 0.62));
-    if (titleP > 0) {
-      const family = 'VigenDisplay, "DejaVu Serif", serif';
-      const size = fitFont('40 HARI', 184, w - 180, family);
-      const rise = (1 - titleP) * 46;
-      const scale = 0.965 + 0.035 * easeOut(span(t, 0.0, 0.9));
-      ctx.save();
-      ctx.globalAlpha = titleP;
-      ctx.translate(cx, cy + rise + drift);
-      ctx.scale(scale, scale);
-      ctx.font = `700 ${size}px ${family}`;
-      ctx.fillStyle = PALETTE.ink;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      if ('letterSpacing' in ctx) ctx.letterSpacing = '4px';
-      ctx.fillText('40 HARI', 0, 0);
-      ctx.restore();
-    }
-
-    // subjudul
-    const subP = easeOut(span(t, 0.85, 0.55));
-    if (subP > 0) {
-      const rise = (1 - subP) * 28;
-      ctx.save();
-      ctx.globalAlpha = subP;
-      ctx.font = '400 44px VigenUI, sans-serif';
-      ctx.fillStyle = PALETTE.inkSoft;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      if ('letterSpacing' in ctx) ctx.letterSpacing = '3px';
-      ctx.fillText('MALAKA · 1511', cx, cy + 138 + rise + drift);
-      ctx.restore();
-    }
-
-    // garis aksen tumbuh dari tengah
-    const lineP = easeInOut(span(t, 1.5, 0.75));
-    if (lineP > 0) {
-      const full = 300;
-      const lw = full * lineP;
-      ctx.save();
-      ctx.fillStyle = PALETTE.gold;
-      ctx.fillRect(cx - lw / 2, cy + 205 + drift, lw, 4);
-      ctx.restore();
-    }
-
-    // caption bawah
-    const capP = easeOut(span(t, 2.5, 0.6));
-    if (capP > 0) {
-      ctx.save();
-      ctx.globalAlpha = 0.62 * capP;
-      ctx.font = '400 30px VigenUI, sans-serif';
-      ctx.fillStyle = PALETTE.ink;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      if ('letterSpacing' in ctx) ctx.letterSpacing = '1px';
-      ctx.fillText('sumber: catatan arsip', cx, cy + 300 + drift);
-      ctx.restore();
-    }
-
-    // penutup kecil di detik 4
-    const endP = easeOut(span(t, 3.9, 0.5));
-    if (endP > 0) {
-      ctx.save();
-      ctx.globalAlpha = 0.5 * endP;
-      ctx.font = '400 24px VigenUI, sans-serif';
-      ctx.fillStyle = PALETTE.ink;
-      ctx.textAlign = 'center';
-      ctx.fillText('bagian 1 dari 1', cx, h - 190);
-      ctx.restore();
-    }
-
-    drawProgress(w, h, t);
-    drawWatermark(w, h);
+    drawProgress(t);
+    drawWatermark();
+    audit();
   }
 
+  // ---------- api ----------
   window.boot = async function boot(cfg) {
     state.width = cfg.width || 1080;
     state.height = cfg.height || 1920;
     state.fps = cfg.fps || 30;
-    state.duration = cfg.duration || 5;
     state.watermark = cfg.watermark || 'LPTech';
     state.postUrl = cfg.postUrl || null;
+
+    const sb = cfg.storyboard || null;
+    state.storyboard = sb;
+    state.duration = sb?.duration ?? cfg.duration ?? 5;
+    state.safe = sb?.safe || FALLBACK_SAFE;
+    state.punchlinePause = sb?.punchlinePause ?? 0.4;
 
     canvas.width = state.width;
     canvas.height = state.height;
@@ -223,6 +1098,7 @@
     }
     await document.fonts.ready;
 
+    buildBackground(state.width, state.height);
     draw(0);
     return true;
   };
@@ -262,7 +1138,24 @@
       body,
     });
     if (!res.ok) throw new Error('POST frame gagal: ' + res.status);
-    return body.length || body.size;
+    return {
+      bytes: body.length || body.byteLength || 0,
+      violations: state.violations,
+    };
+  };
+
+  window.__auditFrame = function auditFrame(t) {
+    draw(t);
+    return {
+      violations: state.violations,
+      boxes: state.boxes,
+      duration: state.duration,
+      safe: state.safe,
+    };
+  };
+
+  window.__violations = function violations() {
+    return state.violations;
   };
 
   window.__bench = function bench(t) {
@@ -274,7 +1167,13 @@
   };
 
   window.__info = function info() {
-    return { width: state.width, height: state.height, fps: state.fps, duration: state.duration };
+    return {
+      width: state.width,
+      height: state.height,
+      fps: state.fps,
+      duration: state.duration,
+      scenes: state.storyboard?.scenes?.length || 0,
+    };
   };
 })();
 </script>

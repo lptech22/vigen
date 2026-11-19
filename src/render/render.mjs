@@ -17,7 +17,7 @@ export function loadState(workDir, meta) {
   const file = path.join(workDir, 'state.json');
   const state = readJson(file, null);
   if (!state || !state.meta) return { state: emptyState(meta), fresh: true, file };
-  const same = ['width', 'height', 'fps', 'totalFrames', 'chunk', 'crf', 'preset', 'capture']
+  const same = ['width', 'height', 'fps', 'totalFrames', 'chunk', 'crf', 'preset', 'capture', 'storyHash']
     .every((k) => state.meta[k] === meta[k]);
   if (!same || state.meta.engine !== meta.engine) {
     return { state: emptyState(meta), fresh: true, file, invalidated: true };
@@ -58,6 +58,7 @@ export async function renderVideo({ cfg, session, host, workDir, outDir, totalFr
     crf: cfg.output.crf,
     preset: cfg.output.preset,
     capture,
+    storyHash: options.storyHash || null,
   };
 
   ensureDir(workDir);
@@ -142,6 +143,17 @@ export async function renderVideo({ cfg, session, host, workDir, outDir, totalFr
         }, 60000);
         if (res.exceptionDetails) {
           throw new Error(`render frame ${frameIndex} gagal: ${res.exceptionDetails.text || 'unknown'}`);
+        }
+        const out = res.result?.value;
+        const violations = out && typeof out === 'object' ? out.violations : null;
+        if (Array.isArray(violations) && violations.length) {
+          const detail = violations.slice(0, 4)
+            .map((b) => `${b.id} (${(b.over || []).join(', ')})`)
+            .join('; ');
+          throw new Error(
+            `teks keluar safe area pada frame ${frameIndex} (t=${t.toFixed(2)} dtk): ${detail}. ` +
+            `Perbaiki scene.js, lalu cek cepat dengan: vigen check`
+          );
         }
         const captureMs = Date.now() - t0;
 

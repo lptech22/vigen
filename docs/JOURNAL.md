@@ -296,6 +296,43 @@ Catatan jujur: sidechain terdengar lebih "hidup" karena mengikuti level voice, t
 
 ---
 
+## 19 Nov 2026 — Sesi 4: visual & humor v0.5.0
+
+### 10:10 — Arah: storyboard, bukan lagi 5 detik hardcoded
+Runtime lama hanya mengenal satu layar. v0.5.0 memindahkan seluruh keputusan visual ke `scene.js`: 8 tipe scene, 6 gag, dan timeline yang mengikuti durasi voice. Renderer jadi data-driven; `stage.html` tidak tahu isi cerita, hanya menggambar storyboard yang dikirim.
+
+### 10:14 — Skema & pemetaan timeline
+`src/story/storyboard.mjs` memvalidasi skema, id unik, tipe scene/gag, lalu memetakan start/end dari `.work/timeline.json`. Id yang sama dengan nama voice dipakai langsung; bila tidak ada yang cocok → urutan index + peringatan; bila sebagian cocok → error. Scene terakhir otomatis mendapat outro 1,5 dtk.
+
+### 10:18 — Audit jadi bagian render
+Setiap `drawBlock` mencatat bounding box dalam koordinat kanvas. `vigen check` mengaudit seluruh frame; `__sendFrame` mengembalikan `violations` sehingga `render` berhenti pada frame pertama yang melanggar. Ini menutup celah "aman di still, keluar saat animasi".
+
+### 10:21 — False positive 1px
+Audit awal menambah padding 1px ke setiap kotak, sehingga teks rata kiri di x=84 selalu dilaporkan `kiri 1px`. Padding dihapus; batas kini persis mengikuti metrik teks.
+
+### 10:23 — QA still: dua tabrakan
+Dari 8 still, hanya `s07` bermasalah: vinyl record-scratch di (802,476) menutup setup, dan struk mulai di y≈738 menutup teks punchline. Perbaikan:
+- vinyl pindah ke pita atas kanan (r 84, pusat 900×304), label rata kanan di 984;
+- struk jadi lower-third (`safe.bottom - h - 40`) dan sadar teks lewat `layout.textBottom`;
+- chat bubble naik ke y 1110 dan dibatasi `layout.asideTop`.
+Semuanya tetap fungsi murni dari `t`.
+
+### 10:26 — Uji kegagalan
+Project "Uji Overflow" dengan teks deadpan sangat panjang: `check` exit 1, `s01:text` melewati bawah 2.161 px; `render` berhenti di frame 4 dengan pesan yang sama. `check --json` mengeluarkan detail kotak + selisih.
+
+### 10:29 — Render penuh & determinisme
+"Uji Visual" 8 scene: 417 frame, 13,900 dtk, 5,7 fps, 74 dtk, 2,1 MB. Render ulang `--force` → sha256 identik `c869fe2c…86bd7`.
+
+### 10:32 — Uji audio menemukan bug serius
+Project 3 scene dengan voice sintetis 1,2 / 1,6 / 1,4 dtk. Ringkasan render menampilkan `s03 … –NaNs`. Ternyata `findByTimeline` memakai `tl.totalDuration`, padahal `tl` adalah array scene, sehingga scene terakhir mendapat `NaN` dan tidak pernah digambar — video tetap "lulus" karena frame-nya kosong. Diperbaiki ke `timeline.totalDuration` plus penjaga `end > start`. Setelah itu: 192 frame, 6,400 dtk, AAC 48 kHz stereo, −14,0 LUFS.
+
+### 10:35 — Verifikasi akhir
+- `vigen test --duration 1 --force --quiet` → lulus.
+- Template `vigen new` → `check` 0 pelanggaran.
+- 8 scene + 6 gag → 2.080 kotak teks, 0 pelanggaran.
+- Determinisme dan mux audio lulus.
+- Versi dinaikkan ke 0.5.0; README, ROADMAP, CHANGELOG diperbarui.
+
 ## Ringkasan angka sesi 1
 
 | Metrik | Nilai |
@@ -321,5 +358,5 @@ Catatan jujur: sidechain terdengar lebih "hidup" karena mengikuti level voice, t
 
 - ~~Workspace `Vigen/` + `Konten N` belum otomatis~~ → selesai di v0.3.0.
 - ~~Audio, ducking, loudnorm, SFX~~ → selesai di v0.4.0.
-- Belum ada subtitle, style pack, dan humor system (v0.5.0–v0.6.0).
+- Belum ada subtitle, preview, publikasi, dan QC (v0.6.0).
 - `tools/bench.mjs` masih memakai jalur `file://` lama; hanya alat dev, bukan jalur produksi.

@@ -4,7 +4,7 @@
 
 > *Tulis naskah. Vigen bikin videonya.*
 
-Status: **v0.4.0** — render inti deterministik, workspace otomatis, dan jalur audio (voice, musik ducking, SFX, loudnorm) sudah lulus uji.
+Status: **v0.5.0** — storyboard 8 tipe scene, style `sejarah/sepia-archive`, 6 gag, dan audit safe area per frame. Render deterministik + jalur audio sudah lulus uji.
 
 ---
 
@@ -54,7 +54,9 @@ Engine sengaja disimpan di `~/.vigen` (tersembunyi dari file manager/Galeri Andr
 | `vigen timing "Konten 2"` | Hitung timeline dari durasi voice (atau estimasi kata/detik) |
 | `vigen audio "Konten 2"` | Rangkai voice + musik + SFX, loudnorm, tulis `out/audio.wav` |
 | `vigen audio "Konten 2" --mux` | Gabungkan audio ke video terbaru di `out/` |
-| `vigen still --at 2.5` | Render satu frame jadi PNG |
+| `vigen render "Konten 2"` | Render `scene.js` jadi video (+ audio otomatis bila ada) |
+| `vigen check "Konten 2"` | Audit semua teks agar 100% di dalam safe area |
+| `vigen still "Konten 2" --scene s03` | Render satu frame / satu scene jadi PNG |
 | `vigen test` | Render video uji 5 detik + validasi otomatis |
 | `vigen version` | Versi engine |
 
@@ -68,9 +70,12 @@ vigen list
 vigen timing "Konten 2"
 vigen audio "Konten 2"
 vigen audio "Konten 2" --mux
+vigen check "Konten 2"
+vigen render "Konten 2"
 
 vigen doctor
 vigen still --at 2.5 --out ./frame.png
+vigen still "Konten 2" --scene s03 --out ./s03.png
 vigen test
 vigen test --capture jpeg:0.95          # draf cepat
 vigen test --chunk 50 --stop-at 60      # uji resume
@@ -149,28 +154,99 @@ Hasil uji audio (project 3 scene, 7,800 dtk):
 | Determinisme | 3 build bersih → sha256 `513a23…b6c7` identik |
 | Mux | 1080×1920 30fps H.264 + AAC 192k, 7,800 dtk |
 
+## Storyboard & humor
+
+Satu file `scene.js` adalah sumber kebenaran visual. AI menulis data deklaratif; mesin tidak menebak kreatif.
+
+```js
+export default {
+  schema: 1,
+  style: 'sejarah/sepia-archive',
+  brand: { watermark: 'LPTech' },
+  scenes: [
+    { id: 's01', type: 'hook', kicker: 'SEJARAH · EP 07', title: '40 HARI', subtitle: 'MALAKA · 1511' },
+    { id: 's02', type: 'fact', kicker: 'FAKTA', title: 'Kenapa 40 hari?', body: 'Karena logistik, bukan takhayul.', source: 'sumber: arsip' },
+    { id: 's03', type: 'punchline', setup: 'Dan bagian yang paling masuk akal:', text: 'TIDAK ADA.', pause: 0.4,
+      gags: [
+        { type: 'record-scratch', at: 0.1 },
+        { type: 'receipt', at: 0.9, title: 'TOTAL KERUGIAN', rows: [['Peta', '0']], total: '0' },
+      ] },
+  ],
+};
+```
+
+**Tipe scene** (field yang dipakai):
+
+| Tipe | Isi |
+|---|---|
+| `hook` | `kicker`, `title`, `subtitle`, `source` |
+| `fact` | `kicker`, `title`, `body`, `source` |
+| `timeline` | `items: [{ year, text }]`, `correction: { was, year, text }` |
+| `quote` | `quote` (atau `text`), `by` |
+| `stat` | `value`, `unit`, `label`, `source` |
+| `deadpan` | `text` (atau `body`), `aside` |
+| `punchline` | `setup`, `text` (atau `title`), `pause` |
+| `outro` | otomatis: brand, tagline, niche |
+
+**Gag** (boleh satu objek atau array di `gags`):
+
+| Gag | Opsi |
+|---|---|
+| `stamp` | `text`, `sub`, `pos` (`top`/`center`/`bottom`), `x`, `y`, `rotate` |
+| `freeze-zoom` | `at`, `to` (skala akhir, default 1,08) |
+| `record-scratch` | `at`, `x`, `y` (default pita atas kanan) |
+| `timeline-corrected` | `at`, `text`, `sub` |
+| `receipt` | `at`, `title`, `rows: [[label, nilai]]`, `total` |
+| `chat-bubble` | `at`, `name`, `text`, `side` (`left`/`right`) |
+
+Aturan penting:
+
+- `id` scene sebaiknya sama dengan nama file voice (tanpa ekstensi). Bila tidak ada yang cocok, urutan index dipakai dengan peringatan; bila sebagian cocok dan sebagian tidak, render ditolak.
+- `duration` opsional; tanpa voice, tiap tipe punya durasi default. Scene terakhir otomatis ditambah outro 1,5 dtk bila belum ada.
+- Safe area teks: **x 84–996, y 210–1580**. Watermark dan progress bar di luar area audit.
+- `punchline` menahan teks dan gag-nya selama jeda `0,4` dtk supaya terasa deadpan.
+- Tata letak gag sadar teks: struk selalu jadi lower-third, vinyl di pita atas, chat bubble naik menghindari `aside`.
+- `vigen check` mengaudit bounding box setiap elemen teks di setiap frame; `vigen render` membatalkan diri pada frame pertama yang melanggar dan menyebut id elemennya.
+
+Hasil uji visual (8 scene, semua tipe + 6 gag):
+
+| Uji | Hasil |
+|---|---|
+| Durasi / frame | 13,900 dtk · 417 frame |
+| Audit teks | 2.080 kotak teks, **0 pelanggaran** |
+| Render | 417/417 frame · 5,7 fps · 74 dtk · 2,1 MB |
+| Determinisme | render ulang `--force` → sha256 **identik** |
+| Overflow sengaja | `check` exit 1 (`bawah 2161px`), `render` berhenti di frame 4 |
+| Audio + mux | 3 scene voice 4,900 dtk + outro → 6,400 dtk, AAC 48 kHz stereo |
+
 ## Hasil uji di perangkat (Termux, 4 core, Android)
 
-| Metrik | PNG (default) | JPEG q0.95 |
-|---|---|---|
-| Throughput | **5,1 fps** | **7,9 fps** |
-| ms/frame | 195 | 126 |
-| Ukuran frame | ~1,1 MB | ~120 KB |
-| Estimasi video 60 dtk | 5 m 50 s | 3 m 47 s |
-| Kualitas | master, lossless | draf / hemat waktu |
+| Metrik | Hasil (v0.5.0, PNG) |
+|---|---|
+| Throughput | **5,7 fps** |
+| ms/frame | 176 |
+| Ukuran frame | ~2,0 MB (tekstur arsip + debu) |
+| Estimasi video 60 dtk | ±5 m 30 s |
+| Kualitas | master, lossless |
+
+JPEG tetap tersedia untuk draf cepat: `--capture jpeg:0.95`.
 
 Validasi yang lulus:
 
-- 150 frame untuk 5,000 detik — **0 frame selisih**
-- durasi tepat 5,000 dtk, H.264, `yuv420p`, 1080×1920
-- dua render terpisah menghasilkan **sha256 identik** (video dan frame)
-- resume setelah frame ke-60: 50 frame dilewati, hasil akhir tetap 150 frame / 5,000 dtk
-- hash frame setelah resume identik dengan render penuh
+- 417 frame untuk 13,900 detik — **0 frame selisih**, durasi tepat
+- H.264, `yuv420p`, 1080×1920
+- 2.080 kotak teks diaudit per frame, **semua di dalam safe area**
+- render ulang `--force` → **sha256 identik** (`c869fe2c…86bd7`)
+- resume memakai `storyHash`; cerita berubah → segmen lama otomatis dibuang
+- mux audio 48 kHz stereo, loudness −14,0 LUFS, video di-copy
 
 ## Cara kerja render
 
 ```
-scene.js / stage.html
+scene.js + voice/.work/timeline.json
+        │
+        ▼
+storyboard  ── start/end per scene, safe area, gag
         │
         ▼
 Chromium headless  ── canvas 2D, semua animasi = f(t)
@@ -191,11 +267,12 @@ Keputusan penting: frame **tidak** dikirim lewat CDP sebagai base64 (mahal), mel
 ~/.vigen/
 ├─ bin/vigen.mjs           launcher CLI
 ├─ src/
-│  ├─ cli/                 doctor, setup, new, list, timing, audio, still, test
+│  ├─ cli/                 doctor, setup, new, list, timing, audio, render, check, still, test
 │  ├─ core/                config, util, workspace
+│  ├─ story/               storyboard (skema, timeline, demo) + prepare
 │  ├─ render/              browser (CDP), host, render, encode
 │  ├─ audio/               timeline, mix (ducking + loudnorm), sfx, probe
-│  └─ runtime/stage.html   kanvas + window.seek(t)
+│  └─ runtime/stage.html   kanvas, 8 scene + 6 gag, audit safe area
 ├─ tools/                  utilitas dev (bench, snap)
 ├─ docs/                   JOURNAL.md, ROADMAP.md
 └─ test/
@@ -209,8 +286,8 @@ Keputusan penting: frame **tidak** dikirim lewat CDP sebagai base64 (mahal), mel
 | v0.2.0 — render, resume, validasi, determinisme | ✅ selesai |
 | v0.3.0 — workspace (`setup`, `new`, `list`) | ✅ selesai |
 | v0.4.0 — audio (voice, ducking, loudnorm, SFX) | ✅ selesai |
-| v0.5.0 — style sejarah + sistem humor | ⏳ berikutnya |
-| v0.6.0 — subtitle, preview, QC | rencana |
+| v0.5.0 — storyboard, sepia-archive, 8 scene, 6 gag, safe-area QC | ✅ selesai |
+| v0.6.0 — subtitle, preview, publikasi, QC | ⏳ berikutnya |
 | v1.0.0 — distribusi GitHub + npm | rencana |
 
 Detail: [`docs/ROADMAP.md`](docs/ROADMAP.md) · Catatan pengembangan: [`docs/JOURNAL.md`](docs/JOURNAL.md)

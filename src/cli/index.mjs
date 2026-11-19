@@ -13,6 +13,8 @@ ${color.bold('Perintah')}
   list              Daftar project + status
   timing [project]  Hitung timeline dari durasi voice (atau estimasi)
   audio [project]   Rangkai voice + musik + SFX, loudnorm, opsional mux
+  render [project]  Render storyboard scene.js jadi video (+ audio)
+  check [project]   Audit teks agar 100% di dalam safe area
   still             Render satu frame jadi PNG
   test              Render video uji 5 detik + validasi
   version           Tampilkan versi
@@ -24,6 +26,9 @@ ${color.bold('Contoh')}
   vigen list
   vigen timing "Konten 2"
   vigen audio "Konten 2"
+  vigen render "Konten 2"
+  vigen check "Konten 2"
+  vigen still "Konten 2" --scene s03
   vigen audio "Konten 2" --mux
   vigen doctor
   vigen still --at 2.5 --out ./frame.png
@@ -54,6 +59,17 @@ ${color.bold('Opsi timing / audio')}
   --mux               Gabungkan audio ke video terbaru di out/
   --video <file>      Video sumber untuk --mux
   --out <file>        Path hasil mux
+
+${color.bold('Opsi render / check')}
+  --out <file>        Path video hasil render
+  --capture <format>  png (kualitas) atau jpeg:0.95 (cepat)
+  --chunk <n>         Frame per segmen (default: 300)
+  --no-retime         Pakai .work/timeline.json yang sudah ada
+  --no-audio          Jangan gabungkan out/audio.wav
+  --step <n>          check: periksa tiap n frame (default: 1)
+  --json              check: keluaran JSON
+  --force             render: abaikan state resume
+  --quiet             Tanpa progres per frame
 `;
 
 export async function main(argv) {
@@ -98,6 +114,16 @@ export async function main(argv) {
   if (cmd === 'audio') {
     const { audioCommand } = await import('./audio.mjs');
     return audioCommand(rest);
+  }
+
+  if (cmd === 'render') {
+    const { renderCommand } = await import('./render.mjs');
+    return renderCommand(rest);
+  }
+
+  if (cmd === 'check') {
+    const { checkCommand } = await import('./check.mjs');
+    return checkCommand(rest);
   }
 
   if (cmd === 'still') {

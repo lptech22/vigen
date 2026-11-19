@@ -8,7 +8,7 @@ Rencana berbasis versi. Aturan main: versi berikutnya tidak dimulai sebelum DoD 
 | v0.2.0 | Render inti | ✅ selesai |
 | v0.3.0 | Workspace | ✅ selesai |
 | v0.4.0 | Audio | ✅ selesai |
-| v0.5.0 | Visual & humor | rencana |
+| v0.5.0 | Visual & humor | ✅ selesai |
 | v0.6.0 | Publikasi & QC | rencana |
 | v1.0.0 | Distribusi | rencana |
 
@@ -65,14 +65,23 @@ Rencana berbasis versi. Aturan main: versi berikutnya tidak dimulai sebelum DoD 
 
 **Keputusan teknis penting:** `sidechaincompress` di ffmpeg 9.0.2 menghasilkan durasi output yang berubah-ubah antar run (7,68 / 7,765 / 7,8 dtk) walau input identik, sehingga determinisme gagal. Ducking diganti envelope `volume` berbasis timeline: tetap halus (60 ms masuk, 250 ms keluar), tetapi sepenuhnya deterministik dan tidak bergantung level voice.
 
-## v0.5.0 — Visual & humor ⏳
+## v0.5.0 — Visual & humor ✅
 
-- style `sejarah/sepia-archive`
-- scene: `hook`, `fact`, `timeline`, `quote`, `stat`, `deadpan`, `punchline`, `outro`
-- gag: `stamp`, `freeze-zoom`, `record-scratch`, `timeline-corrected`, `receipt`, `chat-bubble`
-- jeda punchline 0,4 dtk; watermark + outro LPTech
+**Deliverable:** storyboard `scene.js` (8 tipe scene), style `sejarah/sepia-archive`, 6 gag, audit safe area per frame, perintah `render` dan `check`.
 
-**DoD:** teks 100% di safe area (cek bounding box); render ulang pixel-identik.
+**DoD tercapai:**
+- Storyboard uji 8 scene (semua tipe) + 6 gag → **417 frame / 13,900 dtk**, tanpa error.
+- Audit per frame: **2.080 kotak teks, 0 keluar safe area** (x 84–996, y 210–1580).
+- Render ulang `--force`: **sha256 identik** `c869fe2c…86bd7`, 417/417 frame, 5,7 fps PNG (176 ms/frame).
+- Overflow sengaja: `check` exit 1 dengan id elemen + `bawah 2161px`; `render` berhenti di frame 4 dengan pesan yang sama.
+- Template `vigen new` lolos `check`; alur audio 3 scene (voice 4,900 dtk + outro) → 6,400 dtk dengan AAC 48 kHz stereo.
+- Watermark + outro 1,5 dtk otomatis; punchline menahan teks/gag 0,4 dtk.
+
+**Keputusan teknis penting:**
+- Audit memakai bounding box setiap `drawBlock`, ditransformasi ke koordinat kanvas; teks dengan alpha 0 tidak dihitung.
+- Gag sadar tata letak lewat `layout.textBottom` / `layout.asideTop`: struk jadi lower-third, vinyl di pita atas, chat bubble naik menghindari `aside`. Semua tetap `f(t)`, jadi deterministik.
+- `storyHash` masuk meta resume supaya perubahan storyboard membatalkan segmen lama.
+- Ditemukan saat uji audio: `findByTimeline` memakai `tl.totalDuration` (array scene) → `end` scene terakhir `NaN` dan scene tidak pernah digambar. Diperbaiki ke `timeline.totalDuration` + penjaga rentang waktu.
 
 ## v0.6.0 — Publikasi & QC
 
