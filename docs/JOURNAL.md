@@ -145,6 +145,45 @@ Render bersih v0.2.0:
 
 ---
 
+## 19 Nov 2026 — Sesi 2: backup GitHub & workspace v0.3.0
+
+### 09:28 — Repo dibuat, tag v0.2.0
+
+- Repo publik: `github.com/lptech22/vigen` (MIT), branch `main`, 24 file, 466 KB.
+- Tag `v0.2.0` + GitHub Release.
+- `config.json` sengaja tidak di-commit (berisi path khusus perangkat); diganti `config.example.json`.
+- File video/gambar/suara dikecualikan lewat `.gitignore`.
+
+### 09:30–09:45 — Workspace v0.3.0
+
+Keputusan desain:
+
+1. **Marker `.vigen-workspace.json`** + `workspaceVersion` — mencegah engine baru merusak workspace lama tanpa peringatan.
+2. **Nama folder = nama tampilan**, slug hanya untuk identitas internal. Nama ber-spasi tetap nyaman di file manager Android.
+3. **Status dihitung dari isi folder**, tidak disimpan di metadata — mustahil basi.
+4. **Adopsi, bukan timpa**: folder lama di workspace otomatis diberi `vigen.project.json` dan template yang belum ada; file yang sudah ada dibiarkan.
+5. **Fallback hanya untuk workspace default**: kalau `--workspace` diberikan eksplisit, error ditampilkan, tidak dialihkan diam-diam.
+
+Uji yang dijalankan:
+
+| Uji | Hasil |
+|---|---|
+| `setup` pada folder berisi `Konten 1` | diadopsi, video lama tetap ada, status `selesai` |
+| `setup` kedua kali | idempoten, tidak ada perubahan |
+| `new "Konten 2"` | struktur lengkap 8 item + metadata |
+| `new "Konten 2"` lagi | ditolak, exit code 1 |
+| transisi status | `naskah` (ada `tts/s01.txt`) → `siap render` (ada `voice/s01.mp3`) |
+| fallback storage | path tidak bisa ditulis (EACCES) → pindah `~/Vigen`, config diperbarui, peringatan tampil |
+| `list --json` | JSON valid untuk otomasi |
+
+Temuan kecil: di Android ini `mkdir` pada `/system/...` mengembalikan `ENOENT`, bukan `EROFS`. `ENOENT` ditambahkan ke daftar kode fallback (hanya berlaku untuk workspace default).
+
+### 09:46 — Verifikasi
+
+`vigen doctor` menampilkan workspace aktif `v0.3.0`; `vigen list` menunjukkan 2 project (`Konten 1` selesai, `Konten 2` baru).
+
+---
+
 ## Ringkasan angka sesi 1
 
 | Metrik | Nilai |
@@ -168,6 +207,6 @@ Render bersih v0.2.0:
 
 ## Utang teknis (dibayar di versi berikutnya)
 
-- Workspace `Vigen/` + `Konten N` belum otomatis (v0.3.0).
+- ~~Workspace `Vigen/` + `Konten N` belum otomatis~~ → selesai di v0.3.0.
 - Belum ada audio, subtitle, style pack, dan humor system (v0.4.0–v0.5.0).
 - `tools/bench.mjs` masih memakai jalur `file://` lama; hanya alat dev, bukan jalur produksi.

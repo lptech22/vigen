@@ -6,7 +6,7 @@ Rencana berbasis versi. Aturan main: versi berikutnya tidak dimulai sebelum DoD 
 |---|---|---|
 | v0.1.0 | Fondasi | ✅ selesai |
 | v0.2.0 | Render inti | ✅ selesai |
-| v0.3.0 | Workspace | ⏳ berikutnya |
+| v0.3.0 | Workspace | ✅ selesai |
 | v0.4.0 | Audio | rencana |
 | v0.5.0 | Visual & humor | rencana |
 | v0.6.0 | Publikasi & QC | rencana |
@@ -36,17 +36,19 @@ Rencana berbasis versi. Aturan main: versi berikutnya tidak dimulai sebelum DoD 
 
 **Keputusan teknis penting:** frame dikirim sebagai biner via `POST /frame` ke host lokal, bukan base64 lewat CDP. Throughput naik 2,4 → 5,1 fps.
 
-## v0.3.0 — Workspace ⏳
+## v0.3.0 — Workspace ✅
 
-- `vigen setup` → `/storage/emulated/0/Vigen` + `Konten 1` + `.vigen-workspace.json`
-- `vigen new "Konten 2"` → struktur project lengkap
-- `vigen list` → status per project
-- Nama ber-spasi dengan slug internal; penulisan atomik
-- Fallback `~/Vigen` bila izin storage ditolak
+**Deliverable:** `setup`, `new`, `list`, marker workspace, project metadata, adopsi folder lama, fallback storage.
 
-**DoD:** setup ulang tidak merusak data; `new` dua project tidak saling menimpa.
+**DoD tercapai:**
+- `setup` pada folder yang sudah berisi `Konten 1` → **diadopsi**, file lama tidak ditimpa.
+- `setup` dijalankan ulang → idempoten (`aktif`, tidak ada data hilang).
+- `new "Konten 2"` membuat struktur lengkap; nama duplikat ditolak dengan exit code 1.
+- `list` mendeteksi transisi status: `baru` → `naskah` → `siap render` → `selesai`.
+- Fallback diuji: workspace tidak bisa ditulis (EACCES) → pindah ke `~/Vigen` + config diperbarui + peringatan.
+- `list --json` tersedia untuk otomasi.
 
-## v0.4.0 — Audio
+## v0.4.0 — Audio ⏳
 
 - `vigen timing` → durasi voice per scene (`ffprobe`)
 - concat dengan jeda 0,3–0,4 dtk

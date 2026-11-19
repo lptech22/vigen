@@ -8,12 +8,18 @@ ${color.bold('Pemakaian')}
 
 ${color.bold('Perintah')}
   doctor            Periksa lingkungan (node, ffmpeg, chromium, font, storage)
+  setup             Siapkan workspace Vigen + project pertama
+  new <nama>        Buat project baru, contoh: vigen new "Konten 2"
+  list              Daftar project + status
   still             Render satu frame jadi PNG
   test              Render video uji 5 detik + validasi
   version           Tampilkan versi
   help              Tampilkan bantuan ini
 
 ${color.bold('Contoh')}
+  vigen setup
+  vigen new "Konten 2"
+  vigen list
   vigen doctor
   vigen still --at 2.5 --out ./frame.png
   vigen still --at 2.5 --format jpeg:0.95 --out ./frame.jpg
@@ -52,6 +58,21 @@ export async function main(argv) {
   if (cmd === 'doctor') {
     const { doctorCommand } = await import('./doctor.mjs');
     return doctorCommand(rest);
+  }
+
+  if (cmd === 'setup') {
+    const { setupCommand } = await import('./setup.mjs');
+    return setupCommand(rest);
+  }
+
+  if (cmd === 'new') {
+    const { newCommand } = await import('./new.mjs');
+    return newCommand(rest);
+  }
+
+  if (cmd === 'list') {
+    const { listCommand } = await import('./list.mjs');
+    return listCommand(rest);
   }
 
   if (cmd === 'still') {

@@ -2,6 +2,21 @@
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), versi mengikuti [SemVer](https://semver.org/lang/id/).
 
+## [0.3.0] — 2026-11-19
+
+### Ditambahkan
+- `vigen setup`: inisialisasi workspace `/storage/emulated/0/Vigen`, marker `.vigen-workspace.json`, project pertama otomatis.
+- `vigen new "<nama>"`: project baru dengan `brief.md`, `script.json`, `scene.js`, folder `tts/ voice/ assets/ out/ .work/`.
+- `vigen list` (+ `--json`): status `baru → naskah → siap render → selesai`, dihitung dari isi folder.
+- Adopsi folder lama tanpa menimpa file yang sudah ada.
+- Fallback workspace ke `~/Vigen` bila lokasi utama tidak bisa ditulis (EACCES/EROFS/ENOENT), dengan peringatan dan pembaruan config.
+- Slug otomatis dari nama (mendukung spasi); nama duplikat ditolak.
+- Pemeriksaan workspace di `vigen doctor`.
+
+### Diperbaiki
+- Pesan `setup` membedakan workspace baru diinisialisasi vs aktif.
+- `--workspace` eksplisit tidak lagi diam-diam dialihkan; error ditampilkan dengan saran perbaikan.
+
 ## [0.2.0] — 2026-11-19
 
 ### Ditambahkan

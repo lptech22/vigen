@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { loadConfig, CONFIG_PATH, ROOT, ENGINE_VERSION } from '../core/config.mjs';
+import { readWorkspace } from '../core/workspace.mjs';
 import { ensureDir, exists, pad, line, section, color, ok, warn, bad, info, humanBytes } from '../core/util.mjs';
 
 function tryExec(cmd, args, timeout = 12000) {
@@ -94,6 +95,12 @@ export async function doctorCommand() {
   } else {
     add('storage', 'warn', `${wsParent} tidak bisa ditulis`, 'Jalankan: termux-setup-storage lalu izinkan akses');
   }
+
+  // Workspace
+  const marker = readWorkspace(cfg.workspace);
+  add('workspace', marker ? 'ok' : 'warn',
+    marker ? `${cfg.workspace} (v${marker.workspaceVersion})` : 'belum di-setup',
+    'Jalankan: vigen setup');
 
   // Temp
   if (writable(cfg.render.tempDir)) {

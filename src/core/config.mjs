@@ -4,7 +4,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { ensureDir, exists, expandTmp } from './util.mjs';
 
-export const ENGINE_VERSION = '0.2.0';
+export const ENGINE_VERSION = '0.3.0';
 export const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 export const CONFIG_DIR = path.join(os.homedir(), '.vigen');
 export const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
@@ -95,6 +95,15 @@ export function loadConfig({ create = true } = {}) {
   }
 
   return cfg;
+}
+
+/** Simpan patch ke config tanpa menyentuh nilai lain (path tetap portabel). */
+export function updateConfig(patch) {
+  const raw = exists(CONFIG_PATH) ? JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')) : defaultConfig();
+  const merged = deepMerge(raw, patch);
+  ensureDir(path.dirname(CONFIG_PATH));
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2) + '\n');
+  return merged;
 }
 
 export function runtimePaths(cfg) {

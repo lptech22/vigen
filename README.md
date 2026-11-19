@@ -4,7 +4,7 @@
 
 > *Tulis naskah. Vigen bikin videonya.*
 
-Status: **v0.2.0** — mesin render inti sudah lulus uji determinisme, resume, dan validasi output.
+Status: **v0.3.0** — mesin render inti lulus uji determinisme & resume, dan workspace project sudah otomatis.
 
 ---
 
@@ -47,7 +47,10 @@ Engine sengaja disimpan di `~/.vigen` (tersembunyi dari file manager/Galeri Andr
 
 | Perintah | Fungsi |
 |---|---|
-| `vigen doctor` | Periksa node, ffmpeg, chromium, font, storage, memori |
+| `vigen doctor` | Periksa node, ffmpeg, chromium, font, storage, workspace, memori |
+| `vigen setup` | Siapkan workspace `Vigen/` + `Konten 1` (idempoten, mengadopsi folder lama) |
+| `vigen new "Konten 2"` | Buat project baru lengkap dengan template |
+| `vigen list` | Daftar project + status (`baru → naskah → siap render → selesai`) |
 | `vigen still --at 2.5` | Render satu frame jadi PNG |
 | `vigen test` | Render video uji 5 detik + validasi otomatis |
 | `vigen version` | Versi engine |
@@ -55,6 +58,10 @@ Engine sengaja disimpan di `~/.vigen` (tersembunyi dari file manager/Galeri Andr
 Contoh cepat:
 
 ```bash
+vigen setup
+vigen new "Konten 2"
+vigen list
+
 vigen doctor
 vigen still --at 2.5 --out ./frame.png
 vigen test
@@ -62,6 +69,30 @@ vigen test --capture jpeg:0.95          # draf cepat
 vigen test --chunk 50 --stop-at 60      # uji resume
 vigen test --force --quiet              # render bersih tanpa progres
 ```
+
+## Workspace
+
+`vigen setup` membuat:
+
+```
+/storage/emulated/0/Vigen/
+├─ .vigen-workspace.json     penanda + versi workspace
+├─ .cache/                   sementara (diabaikan galeri)
+├─ Konten 1/
+│  ├─ vigen.project.json     nama, slug, niche, tone, format
+│  ├─ brief.md               ide & arahan
+│  ├─ script.json            naskah + niat visual
+│  ├─ scene.js               timeline (ditulis AI)
+│  ├─ tts/                   teks siap tempel ke ElevenLabs
+│  ├─ voice/                 hasil suara (mp3/wav/m4a)
+│  ├─ assets/  out/  .work/
+└─ Konten 2/ ...
+```
+
+- Nama folder boleh ber-spasi; slug internal otomatis (`Konten 2` → `konten-2`).
+- `setup` **tidak menimpa** file yang sudah ada dan mengadopsi folder lama jadi project.
+- Bila storage belum diizinkan, workspace jatuh ke `~/Vigen` dengan peringatan jelas.
+- Status project dihitung dari isi folder, bukan disimpan — tidak pernah basi.
 
 ## Hasil uji di perangkat (Termux, 4 core, Android)
 
@@ -120,8 +151,8 @@ Keputusan penting: frame **tidak** dikirim lewat CDP sebagai base64 (mahal), mel
 |---|---|
 | v0.1.0 — fondasi (doctor, still, Chromium) | ✅ selesai |
 | v0.2.0 — render, resume, validasi, determinisme | ✅ selesai |
-| v0.3.0 — workspace (`setup`, `new`, `list`) | ⏳ berikutnya |
-| v0.4.0 — audio (voice, ducking, loudnorm) | rencana |
+| v0.3.0 — workspace (`setup`, `new`, `list`) | ✅ selesai |
+| v0.4.0 — audio (voice, ducking, loudnorm) | ⏳ berikutnya |
 | v0.5.0 — style sejarah + sistem humor | rencana |
 | v0.6.0 — subtitle, preview, QC | rencana |
 | v1.0.0 — distribusi GitHub + npm | rencana |
