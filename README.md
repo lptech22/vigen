@@ -34,11 +34,12 @@ pkg install nodejs ffmpeg chromium git
 ## Instalasi (lokal, sebelum rilis GitHub)
 
 ```bash
-git clone <repo> ~/.vigen          # nanti setelah repo tersedia
-# atau, untuk kondisi sekarang:
+git clone https://github.com/lptech22/vigen ~/.vigen
 ln -sf "$HOME/.vigen/bin/vigen.mjs" "$PREFIX/bin/vigen"
 vigen doctor
 ```
+
+Catatan: clone ke `~/.vigen` mensyaratkan folder itu belum ada. Kalau sudah ada, gunakan `git -C ~/.vigen pull` untuk memperbarui.
 
 Engine sengaja disimpan di `~/.vigen` (tersembunyi dari file manager/Galeri Android) dan memakai filesystem cepat, bukan FUSE di `/storage`.
 
