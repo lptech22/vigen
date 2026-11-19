@@ -184,6 +184,118 @@ Temuan kecil: di Android ini `mkdir` pada `/system/...` mengembalikan `ENOENT`, 
 
 ---
 
+## 19 Nov 2026 — Sesi 3: audio v0.4.0
+
+### 09:48 — Tiga modul baru
+
+`timing` dan `audio` ditulis sebagai modul terpisah supaya alur bisa diuji sendiri-sendiri:
+
+| Modul | Tanggung jawab |
+|---|---|
+| `src/audio/timeline.mjs` | baca durasi voice (`ffprobe`), hitung start/end, tulis `.work/timeline.json` |
+| `src/audio/mix.mjs` | voice bus, musik, ducking, SFX, `loudnorm` 2-pass, mux |
+| `src/audio/sfx.mjs` | SFX prosedural dari filter ffmpeg |
+| `src/audio/probe.mjs` | durasi & format audio |
+
+Fallback estimasi memakai 2,4 kata/detik. Tujuannya bukan akurasi, melainkan supaya `scene.js` dan visual bisa disiapkan sebelum voice selesai.
+
+### 09:53 — Project uji & suara sintetis
+
+Project `Uji Audio` diisi tiga MP3 sine:
+
+| File | Durasi | Frekuensi |
+|---|---|---|
+| `s01.mp3` | 1,6 dtk | 440 Hz |
+| `s02.mp3` | 2,1 dtk | 660 Hz |
+| `s03.mp3` | 4,2 dtk (awalnya 2,1) | 660 Hz |
+
+Frekuensi berbeda dipakai supaya onset tiap scene bisa dideteksi dari energi sinyal, bukan ditebak dari durasi.
+
+### 09:55 — Bug parser loudness
+
+Run pertama melaporkan **−70,0 LUFS**, padahal `true peak` −12,6 dB. Aneh: sinyal jelas ada.
+
+Penyebab: regex mengambil kemunculan `I:` **pertama** dari log `ebur128`, yaitu baris progres saat masih senyap. Nilai akhir ada di ringkasan paling bawah. Perbaikan: ambil match terakhir.
+
+Setelah diperbaiki: **−14,0 LUFS**, sesuai target.
+
+### 09:56 — Ducking awalnya tidak jalan
+
+Pengukuran pertama menunjukkan ducking hanya **0,4 dB**. Ternyata sinyal uji (sine bawaan ffmpeg) jauh lebih pelan dari suara TTS normal, sehingga berada di bawah threshold `sidechaincompress`.
+
+Beberapa kombinasi diuji:
+
+| Parameter | Ducking |
+|---|---|
+| `threshold=0.05 ratio=8` (awal) | 0,4 dB |
+| `threshold=0.05 ratio=4 level_sc=4` | 7,1 dB |
+| `threshold=0.05 ratio=4 level_sc=8` | 9,3 dB |
+| `threshold=0.02 ratio=6 level_sc=8` | 10,9 dB |
+
+`level_sc=4` dipilih: cukup dalam untuk voice pelan, tidak berlebihan untuk voice normal.
+
+### 09:57 — Determinisme gagal
+
+Dua build bersih menghasilkan sha256 audio berbeda. Investigasi per stem:
+
+| Stem | Hasil |
+|---|---|
+| `voice-bus.wav` | identik |
+| `music-raw.wav` | identik |
+| `music-duck.wav` | **berbeda** |
+| SFX | identik |
+
+Penyebabnya bukan input. `sidechaincompress` di ffmpeg 9.0.2 menghasilkan **durasi output yang berubah-ubah** pada input yang sama: 7,680 / 7,765333 / 7,800 dtk dalam lima run. Kemungkinan race di EOF/threading filter tersebut.
+
+Keputusan: **buang `sidechaincompress` untuk ducking**. Ganti dengan envelope `volume` yang dihitung dari timeline:
+
+- turun 60 ms sebelum voice,
+- naik 250 ms setelah voice selesai,
+- kedalaman 0,65 (−9,1 dB),
+- `max()` antar scene supaya tidak menumpuk.
+
+Hasil: tiga build bersih → sha256 `513a2357f6d6ddec51c1008f19f9d2b28e489e0c2b68330b5fb74f6df282b6c7` identik.
+
+### 09:58 — SFX juga perlu seed
+
+`anoisesrc` memakai seed acak secara default. Dua generate `whoosh` menghasilkan hash berbeda. Seed tetap ditambahkan (`whoosh=7`, `scratch=11`, `tick=13`); `boom` dan `pop` memakai sine sehingga sudah deterministik.
+
+### 09:59 — Uji SFX, reflow, dan mux
+
+SFX diuji dengan membandingkan mix ber-SFX dan tanpa SFX:
+
+| Jendela | Selisih sinyal |
+|---|---|
+| whoosh 0,20–0,70 | −33,0 dBFS |
+| boom 1,95–2,85 | −28,6 dBFS |
+| pop 4,40–4,54 | −30,1 dBFS |
+| kontrol (tanpa cue) | **−180 dBFS** (identik) |
+
+Artinya SFX benar-benar masuk hanya di cue.
+
+Reflow diuji dengan menggandakan `s02.mp3` dari 2,1 → 4,2 dtk. Timeline otomatis berubah 5,7 → 7,8 dtk, scene ketiga bergeser 4,4 → 6,5 dtk, dan offset voice tetap **−1,2 ms**.
+
+`--no-retime` diuji dengan menggeser start scene ketiga di `timeline.json`; output mengikuti 6,6 dtk, bukan menghitung ulang.
+
+Mux: video uji 1080×1920 30fps + audio 7,8 dtk → H.264 di-copy, AAC 192 kbps, `+faststart`, durasi 7,800 dtk, dua run sha256 identik.
+
+### 10:00 — Hasil akhir
+
+| Uji | Target | Hasil |
+|---|---|---|
+| Offset voice | ≤ ±30 ms | **−1,2 ms** |
+| Loudness | −14 ± 0,5 LUFS | **−13,9 LUFS** |
+| Ducking | ≥ 6 dB | **9,1 dB** |
+| Level musik di jeda | kembali normal | selisih 0,23 dB |
+| Determinisme | identik | 3/3 build identik |
+| Mux | A/V sinkron | 7,800 dtk, deterministic |
+
+Waktu proses audio 7,8 dtk: **±2 detik** (didominasi decode MP3 + `loudnorm` 2-pass). Jauh lebih cepat dari render video, jadi tidak jadi bottleneck.
+
+Catatan jujur: sidechain terdengar lebih "hidup" karena mengikuti level voice, tetapi harga non-determinisme tidak bisa diterima untuk engine yang mengklaim render identik. Envelope timeline adalah kompromi yang tepat untuk format scene yang sudah diketahui durasinya.
+
+---
+
 ## Ringkasan angka sesi 1
 
 | Metrik | Nilai |
@@ -208,5 +320,6 @@ Temuan kecil: di Android ini `mkdir` pada `/system/...` mengembalikan `ENOENT`, 
 ## Utang teknis (dibayar di versi berikutnya)
 
 - ~~Workspace `Vigen/` + `Konten N` belum otomatis~~ → selesai di v0.3.0.
-- Belum ada audio, subtitle, style pack, dan humor system (v0.4.0–v0.5.0).
+- ~~Audio, ducking, loudnorm, SFX~~ → selesai di v0.4.0.
+- Belum ada subtitle, style pack, dan humor system (v0.5.0–v0.6.0).
 - `tools/bench.mjs` masih memakai jalur `file://` lama; hanya alat dev, bukan jalur produksi.

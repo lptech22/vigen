@@ -1,6 +1,6 @@
 {
   "configVersion": 1,
-  "engine": { "version": "0.3.0", "name": "Vigen", "vendor": "LPTech" },
+  "engine": { "version": "0.4.0", "name": "Vigen", "vendor": "LPTech" },
   "paths": {
     "ffmpeg": "ffmpeg",
     "ffprobe": "ffprobe",

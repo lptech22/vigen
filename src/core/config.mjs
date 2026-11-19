@@ -4,7 +4,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { ensureDir, exists, expandTmp } from './util.mjs';
 
-export const ENGINE_VERSION = '0.3.0';
+export const ENGINE_VERSION = '0.4.0';
 export const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 export const CONFIG_DIR = path.join(os.homedir(), '.vigen');
 export const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');

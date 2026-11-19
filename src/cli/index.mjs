@@ -11,6 +11,8 @@ ${color.bold('Perintah')}
   setup             Siapkan workspace Vigen + project pertama
   new <nama>        Buat project baru, contoh: vigen new "Konten 2"
   list              Daftar project + status
+  timing [project]  Hitung timeline dari durasi voice (atau estimasi)
+  audio [project]   Rangkai voice + musik + SFX, loudnorm, opsional mux
   still             Render satu frame jadi PNG
   test              Render video uji 5 detik + validasi
   version           Tampilkan versi
@@ -20,6 +22,9 @@ ${color.bold('Contoh')}
   vigen setup
   vigen new "Konten 2"
   vigen list
+  vigen timing "Konten 2"
+  vigen audio "Konten 2"
+  vigen audio "Konten 2" --mux
   vigen doctor
   vigen still --at 2.5 --out ./frame.png
   vigen still --at 2.5 --format jpeg:0.95 --out ./frame.jpg
@@ -39,6 +44,16 @@ ${color.bold('Opsi test')}
   --hash-file <file>  Tulis hash ke file JSON
   --force             Abaikan state lama, render dari awal
   --quiet             Tanpa progres per frame
+
+${color.bold('Opsi timing / audio')}
+  --gap <dtk>         Jeda antar scene (default: 0.35)
+  --wps <n>           Estimasi kata/detik bila voice belum ada (default: 2.4)
+  --no-retime         Pakai .work/timeline.json yang sudah ada
+  --music <file>      Override musik (default: assets/music.*)
+  --sfx <file>        Override cue SFX (default: sfx.json)
+  --mux               Gabungkan audio ke video terbaru di out/
+  --video <file>      Video sumber untuk --mux
+  --out <file>        Path hasil mux
 `;
 
 export async function main(argv) {
@@ -73,6 +88,16 @@ export async function main(argv) {
   if (cmd === 'list') {
     const { listCommand } = await import('./list.mjs');
     return listCommand(rest);
+  }
+
+  if (cmd === 'timing') {
+    const { timingCommand } = await import('./timing.mjs');
+    return timingCommand(rest);
+  }
+
+  if (cmd === 'audio') {
+    const { audioCommand } = await import('./audio.mjs');
+    return audioCommand(rest);
   }
 
   if (cmd === 'still') {

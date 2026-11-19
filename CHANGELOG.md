@@ -2,6 +2,28 @@
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), versi mengikuti [SemVer](https://semver.org/lang/id/).
 
+## [0.4.0] — 2026-11-19
+
+### Ditambahkan
+- `vigen timing "<project>"`: timeline dari durasi voice asli (`ffprobe`), jeda antar scene (`--gap`, default 0,35 dtk); fallback estimasi 2,4 kata/detik dari `script.json` (`--wps`).
+- `vigen audio "<project>"`: voice bus, musik ducking, SFX, mix, `loudnorm` 2-pass, tulis `out/audio.wav`.
+- `vigen audio --mux`: gabungkan audio ke video (AAC 192 kbps, video di-copy, `+faststart`).
+- SFX prosedural `whoosh`, `boom`, `scratch`, `pop`, `tick` lewat `sfx.json` — tanpa file berlisensi, seed tetap.
+- `--no-retime`, `--music`, `--sfx`, `--video`, `--out`.
+- `resolveProject`: pilih project dari nama, slug, atau path.
+- Pemeriksaan filter audio di `vigen doctor` (`loudnorm`, `amix`, `adelay`, `apad`, `volume`).
+
+### Diperbaiki
+- Loudness reader kini memakai hasil akhir `ebur128`, bukan baris progres pertama (sebelumnya salah melaporkan −70 LUFS).
+- Ducking tidak lagi memakai `sidechaincompress` yang non-deterministik di ffmpeg 9.0.2; diganti envelope `volume` berbasis timeline (60 ms masuk, 250 ms keluar, −9 dB).
+- `anoisesrc` diberi seed tetap supaya SFX identik antar build.
+- Validasi `sfx.json` memberi pesan jelas untuk JSON rusak atau format salah.
+
+### Teknis
+- Determinisme audio: 3 build bersih berturut-turut → sha256 identik.
+- Offset voice −1,2 ms; loudness −13,9 LUFS; ducking 9,1 dB; mux 7,800 dtk deterministik.
+- Tanpa dependensi npm tetap dipertahankan.
+
 ## [0.3.0] — 2026-11-19
 
 ### Ditambahkan

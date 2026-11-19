@@ -4,7 +4,7 @@
 
 > *Tulis naskah. Vigen bikin videonya.*
 
-Status: **v0.3.0** — mesin render inti lulus uji determinisme & resume, dan workspace project sudah otomatis.
+Status: **v0.4.0** — render inti deterministik, workspace otomatis, dan jalur audio (voice, musik ducking, SFX, loudnorm) sudah lulus uji.
 
 ---
 
@@ -51,6 +51,9 @@ Engine sengaja disimpan di `~/.vigen` (tersembunyi dari file manager/Galeri Andr
 | `vigen setup` | Siapkan workspace `Vigen/` + `Konten 1` (idempoten, mengadopsi folder lama) |
 | `vigen new "Konten 2"` | Buat project baru lengkap dengan template |
 | `vigen list` | Daftar project + status (`baru → naskah → siap render → selesai`) |
+| `vigen timing "Konten 2"` | Hitung timeline dari durasi voice (atau estimasi kata/detik) |
+| `vigen audio "Konten 2"` | Rangkai voice + musik + SFX, loudnorm, tulis `out/audio.wav` |
+| `vigen audio "Konten 2" --mux` | Gabungkan audio ke video terbaru di `out/` |
 | `vigen still --at 2.5` | Render satu frame jadi PNG |
 | `vigen test` | Render video uji 5 detik + validasi otomatis |
 | `vigen version` | Versi engine |
@@ -61,6 +64,10 @@ Contoh cepat:
 vigen setup
 vigen new "Konten 2"
 vigen list
+
+vigen timing "Konten 2"
+vigen audio "Konten 2"
+vigen audio "Konten 2" --mux
 
 vigen doctor
 vigen still --at 2.5 --out ./frame.png
@@ -93,6 +100,54 @@ vigen test --force --quiet              # render bersih tanpa progres
 - `setup` **tidak menimpa** file yang sudah ada dan mengadopsi folder lama jadi project.
 - Bila storage belum diizinkan, workspace jatuh ke `~/Vigen` dengan peringatan jelas.
 - Status project dihitung dari isi folder, bukan disimpan — tidak pernah basi.
+
+## Audio
+
+Voice dibuat di luar (ElevenLabs, dsb.), Vigen hanya merangkainya.
+
+```bash
+# 1. taruh hasil suara di voice/  → s01.mp3, s02.mp3, ...
+# 2. opsional: assets/music.mp3 dan sfx.json
+vigen timing "Konten 2"          # baca durasi asli, tulis .work/timeline.json
+vigen audio "Konten 2"           # tulis out/audio.wav
+vigen audio "Konten 2" --mux     # tulis <video>_audio.mp4
+```
+
+`sfx.json` (opsional, di root project):
+
+```json
+{
+  "cues": [
+    { "id": "whoosh", "at": 0.2, "volume": 0.5 },
+    { "id": "boom", "at": 3.4 },
+    { "id": "scratch", "at": 8.0 }
+  ]
+}
+```
+
+SFX yang tersedia: `whoosh`, `boom`, `scratch`, `pop`, `tick`. Semuanya dibuat prosedural dengan ffmpeg dan seed tetap, jadi tidak butuh file berlisensi dan hasilnya deterministik.
+
+Perilaku penting:
+
+- Nama file `voice/` diurutkan natural (`s2` sebelum `s10`); urutan file = urutan scene.
+- Durasi scene diambil dari file voice asli; jeda default **0,35 dtk** (`--gap`).
+- Bila `voice/` kosong, timeline memakai estimasi **2,4 kata/detik** dari `narasi` di `script.json` (`--wps`) supaya visual bisa disiapkan lebih dulu.
+- Musik di-*ducking* **−9 dB** selama voice aktif, dengan ramp 60 ms masuk dan 250 ms keluar. Ducking dihitung dari timeline, bukan `sidechaincompress`, supaya hasilnya deterministik.
+- `loudnorm` 2-pass ke **−14 LUFS**, ceiling true peak −1,5 dB, output 48 kHz stereo.
+- `--mux` menyalin stream video apa adanya dan menambahkan AAC 192 kbps; audio dipad ke durasi video.
+- `--no-retime` memakai `.work/timeline.json` yang sudah ada (mis. setelah cue SFX disesuaikan manual).
+
+Hasil uji audio (project 3 scene, 7,800 dtk):
+
+| Uji | Hasil |
+|---|---|
+| Offset voice vs timeline | **−1,2 ms** (target ≤ ±30 ms) |
+| Loudness | **−13,9 LUFS** (target −14 ± 0,5) |
+| Ducking saat voice | **9,1 dB** (target ≥ 6 dB) |
+| SFX di luar cue | selisih **−180 dBFS** (benar-benar tidak bocor) |
+| Reflow durasi | satu MP3 2,1 → 4,2 dtk, total 5,7 → 7,8 dtk, offset tetap |
+| Determinisme | 3 build bersih → sha256 `513a23…b6c7` identik |
+| Mux | 1080×1920 30fps H.264 + AAC 192k, 7,800 dtk |
 
 ## Hasil uji di perangkat (Termux, 4 core, Android)
 
@@ -136,9 +191,10 @@ Keputusan penting: frame **tidak** dikirim lewat CDP sebagai base64 (mahal), mel
 ~/.vigen/
 ├─ bin/vigen.mjs           launcher CLI
 ├─ src/
-│  ├─ cli/                 doctor, still, test
-│  ├─ core/                config, util
+│  ├─ cli/                 doctor, setup, new, list, timing, audio, still, test
+│  ├─ core/                config, util, workspace
 │  ├─ render/              browser (CDP), host, render, encode
+│  ├─ audio/               timeline, mix (ducking + loudnorm), sfx, probe
 │  └─ runtime/stage.html   kanvas + window.seek(t)
 ├─ tools/                  utilitas dev (bench, snap)
 ├─ docs/                   JOURNAL.md, ROADMAP.md
@@ -152,8 +208,8 @@ Keputusan penting: frame **tidak** dikirim lewat CDP sebagai base64 (mahal), mel
 | v0.1.0 — fondasi (doctor, still, Chromium) | ✅ selesai |
 | v0.2.0 — render, resume, validasi, determinisme | ✅ selesai |
 | v0.3.0 — workspace (`setup`, `new`, `list`) | ✅ selesai |
-| v0.4.0 — audio (voice, ducking, loudnorm) | ⏳ berikutnya |
-| v0.5.0 — style sejarah + sistem humor | rencana |
+| v0.4.0 — audio (voice, ducking, loudnorm, SFX) | ✅ selesai |
+| v0.5.0 — style sejarah + sistem humor | ⏳ berikutnya |
 | v0.6.0 — subtitle, preview, QC | rencana |
 | v1.0.0 — distribusi GitHub + npm | rencana |
 

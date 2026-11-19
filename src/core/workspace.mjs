@@ -272,3 +272,20 @@ export function shortDate(ms) {
   const p = (n) => String(n).padStart(2, '0');
   return `${p(d.getDate())} ${bulan[d.getMonth()]} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+
+/** Cari project dari nama, slug, atau path. Tanpa argumen: hanya jika ada tepat 1 project. */
+export function resolveProject(ws, query) {
+  const projects = listProjects(ws);
+  if (!projects.length) {
+    throw new Error('belum ada project. Buat dulu: vigen new "Konten 1"');
+  }
+  if (!query) {
+    if (projects.length === 1) return projects[0];
+    throw new Error(`sebutkan nama project. Pilihan: ${projects.map((p) => `"${p.name}"`).join(', ')}`);
+  }
+  const q = String(query).trim().toLowerCase();
+  const hit = projects.find((p) => p.name.toLowerCase() === q || p.slug.toLowerCase() === q || p.dir === query);
+  if (!hit) throw new Error(`project "${query}" tidak ditemukan. Coba: vigen list`);
+  return hit;
+}
+

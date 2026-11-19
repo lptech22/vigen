@@ -7,7 +7,7 @@ Rencana berbasis versi. Aturan main: versi berikutnya tidak dimulai sebelum DoD 
 | v0.1.0 | Fondasi | ✅ selesai |
 | v0.2.0 | Render inti | ✅ selesai |
 | v0.3.0 | Workspace | ✅ selesai |
-| v0.4.0 | Audio | rencana |
+| v0.4.0 | Audio | ✅ selesai |
 | v0.5.0 | Visual & humor | rencana |
 | v0.6.0 | Publikasi & QC | rencana |
 | v1.0.0 | Distribusi | rencana |
@@ -48,18 +48,24 @@ Rencana berbasis versi. Aturan main: versi berikutnya tidak dimulai sebelum DoD 
 - Fallback diuji: workspace tidak bisa ditulis (EACCES) → pindah ke `~/Vigen` + config diperbarui + peringatan.
 - `list --json` tersedia untuk otomasi.
 
-## v0.4.0 — Audio ⏳
+## v0.4.0 — Audio ✅
 
-- `vigen timing` → durasi voice per scene (`ffprobe`)
-- concat dengan jeda 0,3–0,4 dtk
-- musik bed + `sidechaincompress`
-- `loudnorm` −14 LUFS, true peak −1,5 dB
-- SFX prosedural (whoosh/scratch/boom) tanpa lisensi
-- fallback estimasi 2,4 kata/detik bila voice belum ada
+**Deliverable:** `timing`, `audio`, timeline dari durasi voice, ducking musik, SFX prosedural, `loudnorm` 2-pass, mux.
 
-**DoD:** offset audio ≤ ±30 ms; loudness −14 ± 0,5; ducking ≥ 6 dB.
+**DoD tercapai:**
+- Offset voice vs timeline **−1,2 ms** (target ≤ ±30 ms), diukur pada voice bus 3 scene.
+- Loudness **−13,9 / −14,0 LUFS** (target −14 ± 0,5); parser loudness diperbaiki agar membaca hasil akhir, bukan baris progres pertama.
+- Ducking **9,1 dB** saat voice aktif (target ≥ 6 dB); level musik di jeda kembali dalam 0,23 dB.
+- SFX tepat waktu: selisih sinyal pada cue −33,0 / −28,6 / −30,1 dBFS, di luar cue **−180 dBFS** (identik).
+- Reflow durasi: satu MP3 2,1 → 4,2 dtk memindahkan scene berikutnya, total 5,7 → 7,8 dtk, offset tetap −1,2 ms.
+- Determinisme: 3 build bersih berturut-turut menghasilkan sha256 audio identik.
+- Mux: H.264 video di-copy + AAC 192 kbps, durasi 7,800 dtk, deterministik.
+- Estimasi 2,4 kata/detik berfungsi saat `voice/` kosong; `--no-retime` menghormati timeline tersimpan.
+- Error path: project tidak ada, voice kosong, dan ID SFX tidak dikenal → pesan jelas + exit code 1.
 
-## v0.5.0 — Visual & humor
+**Keputusan teknis penting:** `sidechaincompress` di ffmpeg 9.0.2 menghasilkan durasi output yang berubah-ubah antar run (7,68 / 7,765 / 7,8 dtk) walau input identik, sehingga determinisme gagal. Ducking diganti envelope `volume` berbasis timeline: tetap halus (60 ms masuk, 250 ms keluar), tetapi sepenuhnya deterministik dan tidak bergantung level voice.
+
+## v0.5.0 — Visual & humor ⏳
 
 - style `sejarah/sepia-archive`
 - scene: `hook`, `fact`, `timeline`, `quote`, `stat`, `deadpan`, `punchline`, `outro`

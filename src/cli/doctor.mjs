@@ -67,9 +67,16 @@ export async function doctorCommand() {
     const ver = (ff.out.split('\n')[0] || '').replace(/^ffmpeg version\s*/i, '').split(' ')[0];
     const enc = tryExec(cfg.paths.ffmpeg, ['-hide_banner', '-encoders']);
     const has264 = enc.ok && /libx264/.test(enc.out);
-    const hasAss = tryExec(cfg.paths.ffmpeg, ['-hide_banner', '-filters']).out.includes(' ass ');
+    const filters = tryExec(cfg.paths.ffmpeg, ['-hide_banner', '-filters']).out;
+    const hasAss = filters.includes(' ass ');
     add('ffmpeg', has264 ? 'ok' : 'bad', `${ver}${has264 ? ' · libx264' : ' · libx264 TIDAK ADA'}${hasAss ? ' · libass' : ''}`,
       has264 ? null : 'Pasang ffmpeg build penuh: pkg install ffmpeg');
+
+    const needed = ['loudnorm', 'amix', 'adelay', 'apad', 'volume'];
+    const missing = needed.filter((f) => !new RegExp(`\\b${f}\\b`).test(filters));
+    add('audio filter', missing.length ? 'bad' : 'ok',
+      missing.length ? `tidak ada: ${missing.join(', ')}` : `${needed.length} filter siap`,
+      missing.length ? 'Pasang ffmpeg build penuh: pkg install ffmpeg' : null);
   }
 
   // ffprobe
