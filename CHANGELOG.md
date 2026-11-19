@@ -2,6 +2,40 @@
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), versi mengikuti [SemVer](https://semver.org/lang/id/).
 
+## [0.6.0] — 2026-11-19
+
+### Ditambahkan
+- `vigen subs` + `vigen subtitle`: potong `narasi` jadi subtitle ≤ 2 baris, tulis `out/subtitle.srt` + `out/subtitle.ass`, dan gambar subtitle di canvas saat render.
+- `vigen preview`: draf 540×960 CRF 30 (`jpeg:0.92`) untuk review cepat, tetap memakai audio dan subtitle bila aktif.
+- `vigen finish`: pastikan audio sinkron, render final 1080×1920 + subtitle, jalankan QC, tulis `out/finish.json`.
+- `vigen qc`: periksa codec, pixel format, resolusi, fps, durasi, loudness, true peak, frame hitam, audio senyap, dan batas subtitle. `--preview` memeriksa draf dan menulis `qc-preview.json`.
+- `vigen publish`: tulis `out/caption.txt` + `out/publish.json` dari `script.json` (`judul`, `deskripsi`, `hashtag`). `--strict` menolak publish bila QC belum lulus.
+- `vigen make`: pipeline idempoten audio → subtitle → render final → QC → publish, dengan manifest `.work/make.json`.
+- Opsi `--subs` / `--no-subs`, `--subs-max-chars`, `--no-audio`, `--no-qc`, `--no-publish`, `--check`, `--force`.
+- Config `subs` (`enabled`, `maxChars`, `maxLines`, `minDuration`) dan `preview` (`scale`, `crf`, `capture`).
+
+### Diperbaiki
+- `qc` tidak lagi memilih `_preview.mp4`, `_audio.mp4`, atau `black_defect.mp4` sebagai video final.
+- `qc --preview` memakai resolusi 540×960 dan menulis laporan terpisah, sehingga QC draf tidak menimpa QC final.
+- `publish` memastikan `qc.json` berasal dari video yang sama; laporan QC draf atau file lain tidak dianggap lulus.
+- `render` membersihkan baris no-op dan memakai `storyHash` yang sudah mencakup subtitle.
+- Opsi `subs` menerima `--max-chars` maupun `--subs-max-chars` dengan validasi angka.
+- `probeAudio` di `qc` hanya dipanggil sekali.
+- `make` mengabaikan `createdAt` pada fingerprint timeline, sehingga run kedua benar-benar idempoten.
+- `finish`/`make` berhenti dengan pesan jelas bila `voice/` kosong dan audio belum ada.
+- Mux audio tidak lagi memakai `-shortest`; pembulatan AAC sempat memotong frame terakhir (435 → 434). `apad=whole_dur` menyamakan audio yang pendek dan `-t` membatasi audio yang panjang.
+- `finish --out <video>` dan `make --out <video>` tidak lagi menimpa video dengan laporan QC; path laporan tetap `out/qc.json`.
+- `make` tidak lagi melewati QC bila `out/qc.json` berasal dari file lain; laporan harus cocok dengan video final sebelum dianggap valid.
+- QC dengan `--no-audio` menandai audio sebagai nonaktif (info), bukan gagal; `finish`/`make --no-audio` bisa lulus dan publish.
+
+### Teknis
+- Uji 4 scene + outro, 14,500 dtk: subtitle 5 potongan · maks 2 baris · maks 37 karakter.
+- Render final PNG 435 frame · **5,75 fps** · 75,7 dtk · 1,9 MB.
+- Preview 540×960: 435 frame · **26,14 fps** · 16,6 dtk.
+- QC final: **−14,0 LUFS** · **−12,7 dBTP** · 0 frame hitam · 0 audio senyap.
+- `make` dijalankan 3×: run 1 membangun semuanya, run 2–3 melewati audio/render/QC. `make --force` menghasilkan sha256 video identik (`4d77feab…c808f08`).
+- Tetap tanpa dependensi npm.
+
 ## [0.5.1] — 2026-11-19
 
 ### Ditambahkan

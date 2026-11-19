@@ -257,8 +257,11 @@ export async function muxAudio(cfg, { video, audio, out }) {
     '-map', '0:v:0', '-map', '1:a:0',
     '-c:v', 'copy',
     '-c:a', 'aac', '-b:a', '192k',
+    // apad menyamakan audio yang lebih pendek, -t membatasi audio yang lebih
+    // panjang. Jangan pakai -shortest: pembulatan AAC bisa memotong frame
+    // video terakhir (435 → 434).
     '-af', `apad=whole_dur=${r3(vd)}`,
-    '-shortest',
+    '-t', r3(vd),
     '-movflags', '+faststart',
     '-map_metadata', '-1',
     out,

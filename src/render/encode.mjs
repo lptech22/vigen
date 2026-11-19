@@ -11,7 +11,7 @@ function tail(s, n = 600) {
   return s.length > n ? `…${s.slice(-n)}` : s;
 }
 
-export function openEncoder(cfg, outFile, { fps, width, height, input = 'image' }) {
+export function openEncoder(cfg, outFile, { fps, width, height, input = 'image', crf = cfg.output.crf }) {
   const inputArgs = input === 'raw'
     ? ['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${width}x${height}`, '-framerate', String(fps)]
     : ['-f', 'image2pipe', '-framerate', String(fps)];
@@ -23,7 +23,7 @@ export function openEncoder(cfg, outFile, { fps, width, height, input = 'image' 
     '-an',
     '-c:v', 'libx264',
     '-preset', cfg.output.preset,
-    '-crf', String(cfg.output.crf),
+    '-crf', String(crf),
     '-pix_fmt', 'yuv420p',
     '-color_range', 'tv',
     '-g', String(fps * 2),

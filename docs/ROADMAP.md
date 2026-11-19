@@ -10,7 +10,7 @@ Rencana berbasis versi. Aturan main: versi berikutnya tidak dimulai sebelum DoD 
 | v0.4.0 | Audio | ✅ selesai |
 | v0.5.0 | Visual & humor | ✅ selesai |
 | v0.5.1 | Prompt AI & voice | ✅ selesai |
-| v0.6.0 | Publikasi & QC | rencana |
+| v0.6.0 | Publikasi & QC | ✅ selesai |
 | v1.0.0 | Distribusi | rencana |
 
 ---
@@ -102,13 +102,25 @@ Rencana berbasis versi. Aturan main: versi berikutnya tidak dimulai sebelum DoD 
 - `vigen voice` dan timeline memakai pembagi blok yang sama (`splitByWords`), jadi teks TTS dan pembagian scene selalu konsisten.
 - Prompt sepenuhnya offline (tanpa API berbayar); pengguna copy-paste ke AI.
 
-## v0.6.0 — Publikasi & QC
+## v0.6.0 — Publikasi & QC ✅
 
-- subtitle ASS dari naskah (bukan Whisper)
-- `preview`, `finish`, `publish`, `qc`
-- QC: durasi, LUFS, frame hitam, audio senyap, teks terpotong
+**Deliverable:** subtitle narasi (SRT/ASS), `subs`, `preview`, `finish`, `qc`, `publish`, `make` idempoten.
 
-**DoD:** subtitle ≤ 2 baris; `make` idempoten.
+**DoD tercapai:**
+- Subtitle dari `narasi` (bukan Whisper): 5 potongan, **maks 2 baris**, maks 37 karakter, ditulis ke `out/subtitle.srt` + `.ass` dan digambar di canvas.
+- `preview` 540×960 CRF 30: 435 frame / 14,500 dtk, **26,14 fps** (16,6 dtk), QC draf lulus dan tersimpan terpisah di `out/qc-preview.json`.
+- `finish` menjalankan audio sinkron → render final 1080×1920 + subtitle → QC → `out/finish.json`.
+- `qc` memeriksa codec, pixel format, resolusi, fps, durasi, loudness, true peak, frame hitam, audio senyap, dan subtitle. Final: **−14,0 LUFS**, **−12,7 dBTP**, 0 frame hitam, 0 audio senyap.
+- `publish` menulis `out/caption.txt` + `out/publish.json` dari `script.json` (`judul`, `deskripsi`, `hashtag`), tanpa upload otomatis.
+- `make` **idempoten**: run 1 audio built + render 435 frame + QC pass + publish; run 2–3 audio/render/QC skip; `--force` menghasilkan sha256 video **identik** (`4d77feab…c808f08`).
+- Render final PNG: 435 frame, **5,75 fps**, 75,7 dtk, 1,9 MB; QC lulus.
+
+**Keputusan teknis penting:**
+- Subtitle dihitung dari kata di `scene.js`, jadi tidak butuh model tambahan dan selalu deterministik. Waktu dibagi proporsional per kata di dalam scene.
+- Subtitle digambar langsung di canvas, bukan filter `subtitles` ffmpeg, supaya posisi, ukuran font, dan safe area sama dengan audit teks lain.
+- QC draf menulis `qc-preview.json`, bukan `qc.json`, supaya hasil draf tidak dianggap sebagai QC final saat `publish`.
+- `make` memakai `.work/make.json` berisi fingerprint input dan output. Fingerprint timeline **mengabaikan `createdAt`**, karena timeline dihitung ulang setiap perintah; tanpa itu `make` akan membangun ulang audio terus-menerus.
+- `make` dan `finish` berhenti lebih awal bila `voice/` kosong dan `out/audio.wav` belum ada, dengan saran memakai `--no-audio`; ini menghemat render yang pasti gagal QC.
 
 ## v1.0.0 — Distribusi
 

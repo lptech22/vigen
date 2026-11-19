@@ -112,6 +112,8 @@ export async function launchBrowser(cfg, { width, height, stageUrl = null, postU
     const bootCfg = {
       width,
       height,
+      logicalWidth: storyboard?.width || cfg.output.width,
+      logicalHeight: storyboard?.height || cfg.output.height,
       fps: cfg.output.fps,
       duration: storyboard?.duration ?? 5,
       watermark: cfg.brand?.watermark || 'LPTech',

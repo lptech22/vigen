@@ -1,10 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { loadConfig } from '../core/config.mjs';
 import { resolveProject } from '../core/workspace.mjs';
 import { parseArgs, ensureDir, line, section, color, ok, info, warn, bad, humanBytes, nowStamp } from '../core/util.mjs';
+import { hashJson } from '../core/media.mjs';
 import { prepareStoryboard } from '../story/prepare.mjs';
+import { subtitleStats, writeSubtitleFiles } from '../story/subs.mjs';
+import { resolveSubtitleOption } from './subtitle-option.mjs';
+import { subtitleOptionsFrom, validateSubtitles } from './subs.mjs';
 import { launchBrowser } from '../render/browser.mjs';
 import { startHost } from '../render/host.mjs';
 import { renderVideo } from '../render/render.mjs';
@@ -18,19 +21,41 @@ function fmtScenes(storyboard) {
     .join(' · ');
 }
 
+function num(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export async function renderCommand(argv) {
   const { flags, rest } = parseArgs(argv);
   const cfg = loadConfig();
   const project = resolveProject(cfg.workspace, rest[0]);
+  const subOpt = await resolveSubtitleOption({ cfg, project, flags });
+  const result = await runRender({ cfg, project, flags, subOpt });
+  return result.code;
+}
+
+/**
+ * Render final yang bisa dipakai ulang oleh `render`, `finish`, dan `make`.
+ * `subOpt` boleh sudah di-resolve supaya pipeline tidak bertanya dua kali.
+ */
+export async function runRender({
+  cfg, project, flags = {}, subOpt = null, quiet = false,
+}) {
   const { width, height, fps } = cfg.output;
+  const opt = subOpt || await resolveSubtitleOption({ cfg, project, flags });
+  const subsOptions = subtitleOptionsFrom(cfg, flags);
 
   const { storyboard, timeline } = await prepareStoryboard({
-    cfg, project, retime: !flags['no-retime'],
+    cfg, project, retime: !flags['no-retime'], subs: opt.enabled, subsOptions,
   });
+
+  const subStats = subtitleStats(storyboard.subs || []);
+  const subProblems = opt.enabled ? validateSubtitles(storyboard.subs || [], subsOptions) : [];
 
   const totalFrames = Math.max(1, Math.round(storyboard.duration * fps));
   const duration = totalFrames / fps;
-  const storyHash = crypto.createHash('sha256').update(JSON.stringify(storyboard)).digest('hex').slice(0, 16);
+  const storyHash = hashJson(storyboard).slice(0, 16);
   const capture = String(flags.capture || 'png');
 
   const work = path.join(project.dir, '.work', 'render');
@@ -41,9 +66,27 @@ export async function renderCommand(argv) {
   ensureDir(path.dirname(out));
   ensureDir(work);
 
-  line(`${color.bold('Vigen render')} ${color.gray(`— ${project.name}`)}`);
-  ok(`storyboard: ${storyboard.scenes.length} scene · ${duration.toFixed(3)} dtk · ${width}x${height} @${fps}fps`);
-  info(`${totalFrames} frame · ${capture}`);
+  if (!quiet) {
+    line(`${color.bold('Vigen render')} ${color.gray(`— ${project.name}`)}`);
+    ok(`storyboard: ${storyboard.scenes.length} scene · ${duration.toFixed(3)} dtk · ${width}x${height} @${fps}fps`);
+    info(`${totalFrames} frame · ${capture}`);
+  }
+  if (opt.enabled) {
+    const src = { flag: 'flag', asked: 'pilihan kamu', project: 'diingat project', config: 'default config' }[opt.source] || opt.source;
+    if (subStats.count) {
+      if (!quiet) {
+        ok(`subtitle: ${subStats.count} potongan · maks ${subStats.maxLines} baris (${src})`);
+      }
+      const files = writeSubtitleFiles(project.dir, storyboard.subs, { dir: outDir });
+      if (!quiet) info(`ekspor: ${path.basename(files.srt)} + ${path.basename(files.ass)}`);
+      for (const p of subProblems.slice(0, 4)) warn(`subtitle ${p}`);
+    } else if (!quiet) {
+      warn('subtitle aktif tetapi narasi kosong — render tanpa subtitle. Isi `narasi` di scene.js.');
+    }
+  } else if (!quiet) {
+    info(`subtitle: nonaktif (${opt.source === 'flag' ? '--no-subs' : 'diingat project'})`);
+  }
+
   if (timeline) {
     const labels = {
       voice: 'durasi voice per scene',
@@ -51,12 +94,12 @@ export async function renderCommand(argv) {
       'voice-blocks': 'blok audio · dibagi proporsional',
       estimate: 'estimasi naskah',
     };
-    info(`timeline: ${labels[timeline.source] || timeline.source}`);
+    if (!quiet) info(`timeline: ${labels[timeline.source] || timeline.source}`);
   }
   for (const n of storyboard.notes) warn(n);
 
   const audioFile = path.join(outDir, 'audio.wav');
-  let hasAudio = fs.existsSync(audioFile) && !flags['no-audio'];
+  const hasAudio = fs.existsSync(audioFile) && !flags['no-audio'];
   if (hasAudio && timeline) {
     try {
       const ad = await probeDuration(cfg, audioFile);
@@ -66,7 +109,7 @@ export async function renderCommand(argv) {
           `Jalankan ulang: vigen audio "${project.name}"`);
       }
     } catch { /* probe gagal: mux tetap dicoba */ }
-  } else if (!hasAudio) {
+  } else if (!hasAudio && !quiet) {
     info('audio: tidak dipakai (out/audio.wav belum ada atau --no-audio)');
   }
 
@@ -89,7 +132,7 @@ export async function renderCommand(argv) {
         chunk: flags.chunk ? Number(flags.chunk) : cfg.render.chunk,
         force: Boolean(flags.force),
         capture,
-        quiet: Boolean(flags.quiet),
+        quiet: Boolean(flags.quiet || quiet),
         storyHash,
       },
     });
@@ -139,25 +182,52 @@ export async function renderCommand(argv) {
     });
   }
 
-  section('Hasil render');
-  ok(`${result.framesRendered} frame · ${fpsActual.toFixed(2)} fps · ${(renderMs / 1000).toFixed(1)} dtk`);
-  for (const c of checks) {
-    if (c.pass) ok(`${c.name}: ${c.detail}`);
-    else bad(`${c.name}: ${c.detail}`);
-  }
+  if (!quiet) {
+    section('Hasil render');
+    ok(`${result.framesRendered} frame · ${fpsActual.toFixed(2)} fps · ${(renderMs / 1000).toFixed(1)} dtk`);
+    for (const c of checks) {
+      if (c.pass) ok(`${c.name}: ${c.detail}`);
+      else bad(`${c.name}: ${c.detail}`);
+    }
 
-  section('Ringkasan');
-  ok(final);
-  info(`${humanBytes(size)} · ${gotDuration.toFixed(3)} dtk · ${hasAudio ? 'dengan audio' : 'tanpa audio'}`);
-  info(`scene: ${fmtScenes(storyboard)}`);
-  info(`selesai ${nowStamp()}`);
+    section('Ringkasan');
+    ok(final);
+    info(`${humanBytes(size)} · ${gotDuration.toFixed(3)} dtk · ${hasAudio ? 'dengan audio' : 'tanpa audio'}`);
+    info(`scene: ${fmtScenes(storyboard)}`);
+    info(`selesai ${nowStamp()}`);
+  }
 
   const allPass = checks.every((c) => c.pass);
-  if (allPass) {
-    ok('video lulus validasi.');
-    if (!hasAudio) info(`tambahkan audio: vigen audio "${project.name}" lalu render ulang.`);
-    return 0;
+  if (!quiet) {
+    if (allPass) {
+      ok('video lulus validasi.');
+      if (!hasAudio && !flags['no-audio']) info(`tambahkan audio: vigen audio "${project.name}" lalu render ulang.`);
+    } else {
+      bad('ada validasi yang gagal.');
+    }
   }
-  bad('ada validasi yang gagal.');
-  return 1;
+
+  return {
+    code: allPass ? 0 : 1,
+    out: final,
+    storyboard,
+    timeline,
+    duration,
+    totalFrames,
+    framesRendered: result.framesRendered,
+    renderMs,
+    fpsActual,
+    checks,
+    allPass,
+    hasAudio,
+    size,
+    subStats,
+    subOpt: opt,
+    subtitleFiles: opt.enabled && subStats.count
+      ? {
+        srt: path.join(outDir, 'subtitle.srt'),
+        ass: path.join(outDir, 'subtitle.ass'),
+      }
+      : null,
+  };
 }

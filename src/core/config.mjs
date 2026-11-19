@@ -4,7 +4,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { ensureDir, exists, expandTmp } from './util.mjs';
 
-export const ENGINE_VERSION = '0.5.1';
+export const ENGINE_VERSION = '0.6.0';
 export const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 export const CONFIG_DIR = path.join(os.homedir(), '.vigen');
 export const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
@@ -53,6 +53,17 @@ export function defaultConfig() {
     render: {
       chunk: 300,
       tempDir: '$TMPDIR/vigen',
+    },
+    subs: {
+      enabled: true,
+      maxChars: 38,
+      maxLines: 2,
+      minDuration: 0.55,
+    },
+    preview: {
+      scale: 0.5,
+      crf: 30,
+      capture: 'jpeg:0.92',
     },
     brand: {
       watermark: 'LPTech',

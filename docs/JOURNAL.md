@@ -423,5 +423,90 @@ Voice bus tepat **10,500 dtk**, jadi tidak ada duplikasi. Mode 2 blok (5 dtk + 4
 
 - ~~Workspace `Vigen/` + `Konten N` belum otomatis~~ → selesai di v0.3.0.
 - ~~Audio, ducking, loudnorm, SFX~~ → selesai di v0.4.0.
-- Belum ada subtitle, preview, publikasi, dan QC (v0.6.0).
+- ~~Subtitle, preview, publikasi, dan QC~~ → selesai di v0.6.0.
 - `tools/bench.mjs` masih memakai jalur `file://` lama; hanya alat dev, bukan jalur produksi.
+
+## 19 Nov 2026 — Sesi 2: publikasi & QC
+
+### 21:40 — Baseline
+
+Working tree sudah berisi `subs`, `preview`, dan `qc` yang belum di-commit. Fokus sesi ini: melengkapi `finish`, `publish`, `make`, memperbaiki pemilihan file QC, dan memverifikasi DoD.
+
+Pemeriksaan awal menemukan tiga masalah:
+
+1. `qc` memilih `.mp4` terbaru, sehingga bisa mengambil `_preview.mp4` atau `black_defect.mp4` lalu gagal di cek resolusi.
+2. `publish` belum ada, padahal `script.json` sudah punya field `publish`.
+3. `make` belum ada, jadi belum ada cara menjalankan pipeline berulang tanpa render ulang.
+
+### 21:45 — Keputusan subtitle
+
+Subtitle tetap dihitung dari `narasi` di `scene.js`, bukan Whisper:
+
+- tidak butuh model/API tambahan;
+- timing deterministik: durasi scene dibagi proporsional dari jumlah kata;
+- subtitle digambar di canvas, bukan filter `subtitles` ffmpeg, supaya posisi dan safe area sama dengan audit teks lain;
+- SRT/ASS tetap diekspor untuk diunggah terpisah.
+
+QC draf menulis `out/qc-preview.json`, bukan `out/qc.json`. Tanpa pemisahan ini, `publish` bisa membaca QC draf 540×960 dan menganggap video final sudah lulus.
+
+### 21:50 — `finish`, `publish`, `make`
+
+- `finish`: cek audio, bangun ulang bila durasi beda > 0,5 dtk, render final + subtitle, QC, tulis `out/finish.json`.
+- `publish`: baca `script.json.publish`, tulis `out/caption.txt` + `out/publish.json`. Tidak upload otomatis.
+- `make`: audio → subtitle → render → QC → publish, dengan manifest `.work/make.json`.
+
+`finish` dan `make` berhenti lebih awal bila `voice/` kosong dan `out/audio.wav` belum ada. Template `Konten 1` tanpa voice tidak lagi merender video 16 detik yang pasti gagal QC.
+
+### 21:55 — Bug idempotensi pertama
+
+Run kedua `make` masih membangun ulang audio. Penyebab: fingerprint audio memakai `JSON.stringify(timeline)`, dan `timeline.createdAt` berubah setiap `prepareStoryboard()`.
+
+Perbaikan: fingerprint timeline hanya memakai `source`, `mode`, `totalDuration`, `scenes`, dan `groups`. Setelah itu run kedua dan ketiga benar-benar melewati audio, render, dan QC.
+
+### 22:00 — Verifikasi
+
+Project uji: 5 scene (4 narasi + outro), 14,500 dtk, satu audio utuh.
+
+| Uji | Hasil |
+|---|---|
+| Render final PNG | 435 frame · **5,75 fps** · 75,7 dtk · 1,9 MB |
+| Preview 540×960 | 435 frame · **26,14 fps** · 16,6 dtk |
+| QC final | −14,0 LUFS · −12,7 dBTP · 0 frame hitam · 0 audio senyap |
+| Subtitle | 5 potongan · maks 2 baris · maks 37 karakter |
+| `make` run 1 | audio built · render rendered · QC pass · publish written |
+| `make` run 2–3 | audio skip · render skip · QC skip · publish written |
+| `make --force` | sha256 `4d77feab…c808f08` — identik dengan run bersih |
+
+### 22:05 — Dokumentasi
+
+README, ROADMAP, CHANGELOG, dan jurnal diperbarui. Versi engine tetap 0.6.0 di `package.json`, `config.json`, dan `config.example.json`.
+
+### 22:12 — Dua bug terakhir
+
+Regresi bersih menemukan `render` melaporkan `434/435` frame walau segmen berisi 300 + 135 frame dan `video-only.mp4` tetap 435. Penyebabnya ada di mux: `-shortest` memilih akhir audio AAC yang dibulatkan sedikit lebih pendek dari video, sehingga frame terakhir dibuang. Perbaikan: hapus `-shortest`; `apad=whole_dur=<durasi video>` sudah memastikan audio sama panjang. Setelah itu `mux-test.mp4` kembali 435 frame / 14,500 dtk.
+
+Bug kedua: `finish --out <video>` meneruskan `flags.out` ke `runQc()`, yang menganggapnya path laporan QC. Akibatnya file video bisa ditimpa JSON. `finish` dan `make` sekarang mengosongkan `out` saat memanggil QC; laporan selalu `out/qc.json`.
+
+Regresi 3× setelah perbaikan:
+
+| Run | Hasil |
+|---|---|
+| 1 (`--force`) | audio built · render 435/435 · QC pass · publish written |
+| 2 | audio skip · render skip · QC skip · publish written |
+| 3 | audio skip · render skip · QC skip · publish written |
+
+sha256 final kembali `4d77feab…c808f08`. `finish --out` dan `make --out` juga diuji: video tetap MP4 435 frame, QC menulis ke `out/qc.json`, dan run kedua idempoten.
+
+Dua celah lain ditemukan saat menguji kombinasi opsi:
+
+1. `make` bisa melewati QC memakai `out/qc.json` milik file lain (mis. hasil `--out` sebelumnya). Sekarang `qcCanSkip` juga membandingkan `qc.path` dengan video final; bila beda, QC dijalankan ulang.
+2. `finish`/`make --no-audio` selalu gagal QC karena audio dianggap hilang. `runQc()` sekarang punya `expectAudio`; bila audio memang dinonaktifkan, hasilnya info, bukan error.
+
+Uji `finish "Konten 1" --no-audio --subs`: 495/495 frame, subtitle 6 potongan maks 2 baris, QC lulus, `finish.json` ditulis. Mux juga diuji dengan audio 20 dtk: output tetap 435 frame / 14,500 dtk karena `-t` membatasi audio.
+
+### Catatan teknis
+
+- `pickVideo()` memilih `<slug>_<width>x<height>.mp4` secara eksplisit, lalu fallback ke video non-preview terbaru.
+- `publish` membandingkan `qc.path`/`qc.file` dengan video yang akan dipublikasikan; QC dari file lain dianggap belum lulus.
+- `make --no-audio` menandai audio nonaktif di `renderKey`, sehingga video beraudio lama tidak dianggap sama dengan video senyap.
+- `finish` tetap merender ulang setiap dipanggil; idempotensi adalah tanggung jawab `make`.

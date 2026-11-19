@@ -2,6 +2,9 @@ import { loadConfig } from '../core/config.mjs';
 import { resolveProject } from '../core/workspace.mjs';
 import { parseArgs, line, section, color, ok, info, warn, bad, pad } from '../core/util.mjs';
 import { prepareStoryboard } from '../story/prepare.mjs';
+import { subtitleStats } from '../story/subs.mjs';
+import { resolveSubtitleOption } from './subtitle-option.mjs';
+import { subtitleOptionsFrom } from './subs.mjs';
 import { launchBrowser } from '../render/browser.mjs';
 
 function sceneAt(storyboard, t) {
@@ -13,8 +16,11 @@ export async function checkCommand(argv) {
   const { flags, rest } = parseArgs(argv);
   const cfg = loadConfig();
   const project = resolveProject(cfg.workspace, rest[0]);
+
+  const subOpt = await resolveSubtitleOption({ cfg, project, flags, persist: false, ask: false });
   const { storyboard } = await prepareStoryboard({
-    cfg, project, retime: !flags['no-retime'],
+    cfg, project, retime: !flags['no-retime'], subs: subOpt.enabled,
+    subsOptions: subtitleOptionsFrom(cfg, flags),
   });
 
   const step = Math.max(1, Number(flags.step || 1));
@@ -24,6 +30,10 @@ export async function checkCommand(argv) {
   line(`${color.bold('Vigen check')} ${color.gray(`— ${project.name}`)}`);
   info(`safe area: x ${safe.left}–${safe.right} · y ${safe.top}–${safe.bottom}`);
   info(`audit ${totalFrames} frame (step ${step}) · ${storyboard.duration.toFixed(3)} dtk`);
+  if (subOpt.enabled && storyboard.subs?.length) {
+    const st = subtitleStats(storyboard.subs);
+    ok(`subtitle ikut diaudit: ${st.count} potongan · maks ${st.maxLines} baris`);
+  }
 
   const browser = await launchBrowser(cfg, {
     width: cfg.output.width,

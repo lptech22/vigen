@@ -41,7 +41,10 @@ export function orderedSegmentFiles(workDir, state) {
  * Frame dikirim dari halaman via POST biner (host), bukan base64 lewat CDP.
  */
 export async function renderVideo({ cfg, session, host, workDir, outDir, totalFrames, options = {} }) {
-  const { width, height, fps } = cfg.output;
+  const width = Number(options.width || cfg.output.width);
+  const height = Number(options.height || cfg.output.height);
+  const fps = Number(options.fps || cfg.output.fps);
+  const crf = Number(options.crf || cfg.output.crf);
   const chunk = Number(options.chunk || cfg.render.chunk || 300);
   const stopAt = options.stopAt ? Math.min(Number(options.stopAt), totalFrames) : null;
   const hashEvery = options.hashEvery ? Math.max(1, Number(options.hashEvery)) : 0;
@@ -55,7 +58,7 @@ export async function renderVideo({ cfg, session, host, workDir, outDir, totalFr
     width, height, fps,
     totalFrames,
     chunk,
-    crf: cfg.output.crf,
+    crf,
     preset: cfg.output.preset,
     capture,
     storyHash: options.storyHash || null,
@@ -111,7 +114,7 @@ export async function renderVideo({ cfg, session, host, workDir, outDir, totalFr
     }
 
     fs.rmSync(target, { force: true });
-    const enc = openEncoder(cfg, target, { fps, width, height, input });
+    const enc = openEncoder(cfg, target, { fps, width, height, input, crf });
 
     let written = 0;
     let currentFrame = -1;

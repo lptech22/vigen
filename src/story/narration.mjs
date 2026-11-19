@@ -20,12 +20,14 @@ export async function loadNarration(projectDir) {
   } catch {
     return null;
   }
-  return data.scenes.map((s) => ({
-    id: s.id,
-    type: s.type,
-    narasi: String(s.narasi ?? '').trim(),
-    words: countWords(s.narasi),
-  }));
+  return data.scenes
+    .filter((s) => s.type !== 'outro')
+    .map((s) => ({
+      id: s.id,
+      type: s.type,
+      narasi: String(s.narasi ?? '').trim(),
+      words: countWords(s.narasi),
+    }));
 }
 
 /**

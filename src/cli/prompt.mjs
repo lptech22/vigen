@@ -124,8 +124,11 @@ export async function promptCommand(argv) {
   line(`  4. ${color.cyan(`vigen voice "${meta.name}"`)} → menghasilkan voice.txt`);
   line(voiceHint);
   line(`  5. ${color.cyan(`vigen check "${meta.name}"`)}`);
-  line(`  6. ${color.cyan(`vigen timing "${meta.name}"`)} lalu ${color.cyan(`vigen audio "${meta.name}"`)}`);
-  line(`  7. ${color.cyan(`vigen render "${meta.name}"`)}`);
+  line(`  6. ${color.cyan(`vigen audio "${meta.name}"`)}`);
+  line(`  7. ${color.cyan(`vigen preview "${meta.name}"`)} → review cepat 540x960`);
+  line(`  8. ${color.cyan(`vigen finish "${meta.name}"`)} → final + subtitle + QC`);
+  line(`  9. ${color.cyan(`vigen publish "${meta.name}"`)} → caption + metadata upload`);
+  line(`     atau sekali jalan: ${color.cyan(`vigen make "${meta.name}"`)}`);
 
   if (voices === 1) {
     section('Catatan');

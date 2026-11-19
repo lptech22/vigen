@@ -15,7 +15,13 @@ ${color.bold('Perintah')}
   list              Daftar project + status
   timing [project]  Hitung timeline dari durasi voice (atau estimasi)
   audio [project]   Rangkai voice + musik + SFX, loudnorm, opsional mux
-  render [project]  Render storyboard scene.js jadi video (+ audio)
+  subs [project]    Hitung subtitle narasi + ekspor out/subtitle.srt + .ass
+  render [project]  Render storyboard scene.js jadi video (+ audio + subtitle)
+  preview [project] Render draf cepat 540x960 CRF30 untuk review
+  finish [project]  Render final + subtitle + mux audio + QC
+  qc [project]      Periksa mutu file final (codec, loudness, hitam, senyap)
+  publish [project] Siapkan caption + metadata upload (out/caption.txt)
+  make [project]    Pipeline idempoten: audio → subs → finish → qc → publish
   check [project]   Audit teks agar 100% di dalam safe area
   still             Render satu frame jadi PNG
   test              Render video uji 5 detik + validasi
@@ -31,7 +37,13 @@ ${color.bold('Contoh')}
   vigen list
   vigen timing "Konten 2"
   vigen audio "Konten 2"
+  vigen subs "Konten 2"
   vigen render "Konten 2"
+  vigen preview "Konten 2"
+  vigen finish "Konten 2"
+  vigen qc "Konten 2"
+  vigen publish "Konten 2"
+  vigen make "Konten 2"
   vigen check "Konten 2"
   vigen still "Konten 2" --scene s03
   vigen audio "Konten 2" --mux
@@ -79,10 +91,38 @@ ${color.bold('Opsi render / check')}
   --chunk <n>         Frame per segmen (default: 300)
   --no-retime         Pakai .work/timeline.json yang sudah ada
   --no-audio          Jangan gabungkan out/audio.wav
+  --subs              Paksa subtitle aktif (tanpa tanya)
+  --no-subs           Paksa subtitle nonaktif (tanpa tanya)
+  --subs-max-chars <n> Batas karakter per baris subtitle (default: 38)
   --step <n>          check: periksa tiap n frame (default: 1)
   --json              check: keluaran JSON
-  --force             render: abaikan state resume
+  --force             render/make: abaikan state resume
   --quiet             Tanpa progres per frame
+
+${color.bold('Opsi subs / preview / finish')}
+  --max-chars <n>     subs: alias --subs-max-chars
+  --out <file>        preview/render/finish/make: path video hasil
+  --scale <n>         preview: skala resolusi (default: 0.5)
+  --crf <n>           preview: kualitas (default: 30)
+  --no-audio          finish/make: jangan pakai out/audio.wav
+  --no-qc             finish/make: lewati QC
+  --no-publish        make: lewati pembuatan caption
+  --check             make: audit safe area sebelum render
+
+${color.bold('Opsi qc / publish')}
+  --preview           qc: periksa file draf 540x960
+  --video <file>      qc/publish: periksa/pakai file tertentu
+  --lufs <n>          qc: target loudness (default: -14)
+  --tol <n>           qc: toleransi LUFS (default: 1)
+  --peak-max <n>      qc: batas true peak dBTP (default: -1)
+  --black-max <n>     qc: ambang frame hitam dtk (default: 0.2)
+  --silence-max <n>   qc: ambang audio senyap dtk (default: 2)
+  --title <teks>      publish: override judul
+  --description <teks> publish: override deskripsi
+  --hashtags <teks>   publish: override hashtag, contoh "#sejarah #malaka"
+  --strict            publish: gagal bila QC belum lulus
+  --publish-out <dir> make: folder caption/metadata (default: out/)
+  --no-retime         subs/qc/make: pakai .work/timeline.json yang ada
 `;
 
 export async function main(argv) {
@@ -142,6 +182,36 @@ export async function main(argv) {
   if (cmd === 'render') {
     const { renderCommand } = await import('./render.mjs');
     return renderCommand(rest);
+  }
+
+  if (cmd === 'subs' || cmd === 'subtitle') {
+    const { subsCommand } = await import('./subs.mjs');
+    return subsCommand(rest);
+  }
+
+  if (cmd === 'preview') {
+    const { previewCommand } = await import('./preview.mjs');
+    return previewCommand(rest);
+  }
+
+  if (cmd === 'finish') {
+    const { finishCommand } = await import('./finish.mjs');
+    return finishCommand(rest);
+  }
+
+  if (cmd === 'qc') {
+    const { qcCommand } = await import('./qc.mjs');
+    return qcCommand(rest);
+  }
+
+  if (cmd === 'publish') {
+    const { publishCommand } = await import('./publish.mjs');
+    return publishCommand(rest);
+  }
+
+  if (cmd === 'make') {
+    const { makeCommand } = await import('./make.mjs');
+    return makeCommand(rest);
   }
 
   if (cmd === 'check') {

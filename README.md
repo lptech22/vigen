@@ -4,7 +4,7 @@
 
 > *Tulis naskah. Vigen bikin videonya.*
 
-Status: **v0.5.1** — `vigen prompt` (wizard AI), `vigen voice` (satu teks TTS), timeline 1 audio proporsional, di atas storyboard 8 scene + 6 gag dan audit safe area.
+Status: **v0.6.0** — subtitle narasi (SRT/ASS), `preview`, `finish`, `qc`, `publish`, dan `make` idempoten, di atas storyboard 8 scene + 6 gag, audio deterministik, dan audit safe area.
 
 ---
 
@@ -56,7 +56,13 @@ Engine sengaja disimpan di `~/.vigen` (tersembunyi dari file manager/Galeri Andr
 | `vigen timing "Konten 2"` | Hitung timeline dari durasi voice (atau estimasi kata/detik) |
 | `vigen audio "Konten 2"` | Rangkai voice + musik + SFX, loudnorm, tulis `out/audio.wav` |
 | `vigen audio "Konten 2" --mux` | Gabungkan audio ke video terbaru di `out/` |
-| `vigen render "Konten 2"` | Render `scene.js` jadi video (+ audio otomatis bila ada) |
+| `vigen subs "Konten 2"` | Hitung subtitle dari `narasi`, tulis `out/subtitle.srt` + `.ass` |
+| `vigen render "Konten 2"` | Render `scene.js` jadi video (+ audio + subtitle otomatis) |
+| `vigen preview "Konten 2"` | Render draf cepat 540×960 CRF 30 untuk review |
+| `vigen finish "Konten 2"` | Render final + subtitle + mux audio + QC |
+| `vigen qc "Konten 2"` | Periksa codec, loudness, frame hitam, audio senyap, subtitle |
+| `vigen publish "Konten 2"` | Siapkan `out/caption.txt` + `out/publish.json` |
+| `vigen make "Konten 2"` | Pipeline idempoten: audio → subtitle → finish → QC → publish |
 | `vigen check "Konten 2"` | Audit semua teks agar 100% di dalam safe area |
 | `vigen still "Konten 2" --scene s03` | Render satu frame / satu scene jadi PNG |
 | `vigen test` | Render video uji 5 detik + validasi otomatis |
@@ -75,8 +81,14 @@ vigen list
 vigen timing "Konten 2"
 vigen audio "Konten 2"
 vigen audio "Konten 2" --mux
+vigen subs "Konten 2"
 vigen check "Konten 2"
-vigen render "Konten 2"
+vigen preview "Konten 2"              # draf 540x960
+vigen finish "Konten 2"               # final 1080x1920 + QC
+vigen qc "Konten 2"
+vigen qc "Konten 2" --preview         # QC draf
+vigen publish "Konten 2"              # caption + metadata
+vigen make "Konten 2"                 # semua langkah, idempoten
 
 vigen doctor
 vigen still --at 2.5 --out ./frame.png
@@ -160,6 +172,89 @@ Hasil uji audio (project 3 scene, 7,800 dtk):
 | Determinisme | 3 build bersih → sha256 `513a23…b6c7` identik |
 | Mux | 1080×1920 30fps H.264 + AAC 192k, 7,800 dtk |
 
+## Subtitle, preview, QC, dan publikasi
+
+Subtitle dibuat dari field `narasi` di `scene.js`, **bukan** dari Whisper. Tidak ada model tambahan, tidak ada API, dan hasilnya deterministik.
+
+```bash
+vigen subs "Konten 2"                 # out/subtitle.srt + out/subtitle.ass
+vigen subs "Konten 2" --subs-max-chars 34
+```
+
+Aturan subtitle:
+
+- dipotong per kalimat, lalu dibungkus maksimal **2 baris**;
+- default **38 karakter** per baris (`subs.maxChars`);
+- timing proporsional dari jumlah kata di dalam scene;
+- scene `outro` dan scene tanpa `narasi` dilewati;
+- subtitle juga digambar di canvas saat render, jadi video dan file SRT/ASS selalu sama.
+
+Alur review dan final:
+
+```bash
+vigen preview "Konten 2"              # 540x960, CRF 30, jpeg:0.92
+vigen preview "Konten 2" --force      # render ulang draf
+vigen qc "Konten 2" --preview         # periksa draf (qc-preview.json)
+
+vigen finish "Konten 2"               # final 1080x1920 + subtitle + audio + QC
+vigen finish "Konten 2" --no-qc       # lewati QC
+vigen finish "Konten 2" --no-audio    # final tanpa audio
+vigen qc "Konten 2"                   # periksa final (qc.json)
+vigen publish "Konten 2"              # out/caption.txt + out/publish.json
+vigen publish "Konten 2" --strict     # gagal bila QC belum lulus
+```
+
+`finish` akan:
+
+1. memakai `out/audio.wav` bila sudah sinkron;
+2. membangun ulang audio bila voice berubah atau durasinya beda > 0,5 dtk;
+3. render final `<slug>_1080x1920.mp4` + subtitle;
+4. menjalankan QC;
+5. menulis `out/finish.json` berisi hash video/audio dan status QC.
+
+`publish` membaca `script.json` → `publish.judul`, `publish.deskripsi`, `publish.hashtag`, lalu menulis:
+
+- `out/caption.txt` — siap copy-paste ke platform;
+- `out/publish.json` — metadata + path video/subtitle + status QC.
+
+Tidak ada upload otomatis. Semua tetap offline.
+
+### `make` idempoten
+
+Satu perintah untuk seluruh pipeline:
+
+```bash
+vigen make "Konten 2"
+vigen make "Konten 2" --check          # audit safe area dulu
+vigen make "Konten 2" --force          # paksa audio + render + QC
+vigen make "Konten 2" --no-publish     # tanpa caption
+vigen make "Konten 2" --no-qc          # tanpa QC
+vigen make "Konten 2" --no-audio       # video tanpa audio
+vigen make "Konten 2" --no-subs        # video tanpa subtitle
+```
+
+Fingerprint disimpan di `.work/make.json` (`scene.js`, voice, musik, SFX, config, timeline, hash audio/video). Bila tidak ada perubahan:
+
+- audio tidak dibangun ulang;
+- render tidak dijalankan ulang;
+- QC memakai hasil sebelumnya;
+- caption/metadata tetap ditulis ulang (murah).
+
+`--no-audio` membuat QC memperlakukan audio sebagai nonaktif (bukan gagal), dan `renderKey` membedakan video beraudio dari video senyap supaya hasil lama tidak salah dipakai ulang.
+
+Hasil uji v0.6.0 (project 4 scene + outro, 14,500 dtk):
+
+| Uji | Hasil |
+|---|---|
+| `make` run 1 | audio built · render 435 frame · QC pass · publish written |
+| `make` run 2–3 | audio skip · render skip · QC skip · publish written |
+| Determinisme `--force` | sha256 video **identik** (`4d77feab…c808f08`) |
+| Render PNG | 435 frame · **5,75 fps** · 75,7 dtk · 1,9 MB |
+| Preview 540×960 | 435 frame · **26,14 fps** · 16,6 dtk |
+| QC final | `-14,0 LUFS` · `-12,7 dBTP` · 0 frame hitam · 0 audio senyap |
+| Subtitle | 5 potongan · maks **2 baris** · maks 37 karakter |
+| Publish | `caption.txt` + `publish.json` · video 1080×1920 |
+
 ## Alur AI: prompt → scene.js → voice
 
 Sejak v0.5.1, AI hanya perlu mengembalikan **satu file** (`scene.js`). Token lebih hemat dan tidak ada duplikasi teks.
@@ -186,9 +281,14 @@ Setelah AI menjawab:
 vigen voice "40 Hari Malaka"     # → voice.txt (gabungan semua narasi)
 # 3. copy voice.txt ke ElevenLabs SEKALI → voice/narasi.mp3
 vigen check "40 Hari Malaka"
-vigen timing "40 Hari Malaka"
 vigen audio "40 Hari Malaka"
-vigen render "40 Hari Malaka"
+vigen preview "40 Hari Malaka"
+vigen finish "40 Hari Malaka"
+vigen qc "40 Hari Malaka"
+vigen publish "40 Hari Malaka"
+
+# atau satu perintah:
+vigen make "40 Hari Malaka"
 ```
 
 Mode audio yang didukung:
@@ -331,12 +431,12 @@ Keputusan penting: frame **tidak** dikirim lewat CDP sebagai base64 (mahal), mel
 ~/.vigen/
 ├─ bin/vigen.mjs           launcher CLI
 ├─ src/
-│  ├─ cli/                 doctor, setup, new, prompt, voice, list, timing, audio, render, check, still, test
-│  ├─ core/                config, util, workspace
-│  ├─ story/               storyboard, prompt builder, narration, prepare
+│  ├─ cli/                 doctor, setup, new, prompt, voice, list, timing, audio, subs, render, preview, finish, qc, publish, make, check, still, test
+│  ├─ core/                config, util, workspace, media (pemilih video + hash)
+│  ├─ story/               storyboard, prompt builder, narration, prepare, subs
 │  ├─ render/              browser (CDP), host, render, encode
 │  ├─ audio/               timeline, mix (ducking + loudnorm), sfx, probe
-│  └─ runtime/stage.html   kanvas, 8 scene + 6 gag, audit safe area
+│  └─ runtime/stage.html   kanvas, 8 scene + 6 gag, subtitle, audit safe area
 ├─ tools/                  utilitas dev (bench, snap)
 ├─ docs/                   JOURNAL.md, ROADMAP.md
 └─ test/
@@ -352,7 +452,7 @@ Keputusan penting: frame **tidak** dikirim lewat CDP sebagai base64 (mahal), mel
 | v0.4.0 — audio (voice, ducking, loudnorm, SFX) | ✅ selesai |
 | v0.5.0 — storyboard, sepia-archive, 8 scene, 6 gag, safe-area QC | ✅ selesai |
 | v0.5.1 — prompt AI + voice sekali generate (1 audio) | ✅ selesai |
-| v0.6.0 — subtitle, preview, publikasi, QC | ⏳ berikutnya |
+| v0.6.0 — subtitle, preview, finish, QC, publish, make idempoten | ✅ selesai |
 | v1.0.0 — distribusi GitHub + npm | rencana |
 
 Detail: [`docs/ROADMAP.md`](docs/ROADMAP.md) · Catatan pengembangan: [`docs/JOURNAL.md`](docs/JOURNAL.md)
