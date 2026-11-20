@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#14100c">
+  <title>Vigen</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <span class="wordmark">Vigen</span>
+      <span class="pill" id="engine">v—</span>
+    </div>
+    <div class="top-actions">
+      <button class="new-project" id="new-project" type="button">+ Project</button>
+      <button class="icon" id="refresh" type="button" aria-label="Muat ulang">⟳</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="workspace" id="workspace">
+      <p class="label">Workspace</p>
+      <p class="path" id="workspace-path">memuat…</p>
+      <p class="note" id="workspace-note"></p>
+    </section>
+
+    <section class="toolbar">
+      <input id="search" type="search" placeholder="Cari project…" autocomplete="off" spellcheck="false">
+      <div class="filters" id="filters">
+        <button class="chip is-active" type="button" data-status="all">Semua</button>
+        <button class="chip" type="button" data-status="selesai">Selesai</button>
+        <button class="chip" type="button" data-status="siap render">Siap render</button>
+        <button class="chip" type="button" data-status="naskah">Naskah</button>
+        <button class="chip" type="button" data-status="baru">Baru</button>
+      </div>
+    </section>
+
+    <section class="summary" id="summary"></section>
+    <section id="projects" class="projects" aria-live="polite"></section>
+
+    <section class="error" id="error" hidden></section>
+  </main>
+
+  <div class="sheet" id="sheet" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <section class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <header class="sheet-head">
+        <div>
+          <h2 id="sheet-title">Project</h2>
+          <p class="sheet-sub" id="sheet-sub"></p>
+        </div>
+        <button class="icon" id="sheet-close" type="button" aria-label="Tutup">✕</button>
+      </header>
+
+      <nav class="tabs" id="tabs">
+        <button class="tab is-active" type="button" data-tab="aksi">Aksi</button>
+        <button class="tab" type="button" data-tab="file">File</button>
+        <button class="tab" type="button" data-tab="hasil">Hasil</button>
+      </nav>
+
+      <div class="tab-body">
+        <section class="tab-pane is-active" id="pane-aksi">
+          <div class="actions" id="actions"></div>
+          <div class="options" id="options"></div>
+
+          <div class="voice-card">
+            <div class="voice-head">
+              <div class="voice-title">
+                <strong>Suara</strong>
+                <span class="voice-hint">mp3, wav, m4a, aac, ogg, flac · maks 50 MB</span>
+              </div>
+              <button class="mini upload" id="voice-upload" type="button">Unggah</button>
+            </div>
+            <input id="voice-file" type="file" accept=".mp3,.wav,.m4a,.aac,.ogg,.flac,audio/*" hidden>
+            <p class="voice-note" id="voice-note"></p>
+            <div class="voice-list" id="voice-list"></div>
+          </div>
+
+          <div class="job" id="job" hidden>
+            <div class="job-top">
+              <span class="job-status" id="job-status">…</span>
+              <button class="mini" id="job-cancel" type="button" hidden>Batal</button>
+            </div>
+            <div class="bar"><i id="job-bar"></i></div>
+            <pre class="log" id="job-log"></pre>
+          </div>
+        </section>
+
+        <section class="tab-pane" id="pane-file">
+          <div class="file-bar">
+            <select id="file-select" aria-label="Pilih file"></select>
+            <button class="mini copy" id="file-copy" type="button">Copy</button>
+            <button class="save" id="file-save" type="button">Simpan</button>
+          </div>
+          <p class="file-note" id="file-note"></p>
+          <textarea id="file-text" spellcheck="false" autocapitalize="off" autocomplete="off" hidden></textarea>
+        </section>
+
+        <section class="tab-pane" id="pane-hasil">
+          <div class="video-wrap" id="video-wrap"></div>
+          <div class="qc-box" id="qc-box"></div>
+          <div class="caption-box" id="caption-box" hidden>
+            <div class="caption-head">
+              <span>Caption</span>
+              <button class="mini" id="caption-copy" type="button">Copy</button>
+            </div>
+            <pre id="caption-text"></pre>
+          </div>
+          <div class="out-list" id="out-list"></div>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <div class="sheet" id="create" hidden>
+    <div class="sheet-backdrop" data-create-close></div>
+    <section class="sheet-panel create-panel" role="dialog" aria-modal="true" aria-labelledby="create-title">
+      <header class="sheet-head">
+        <div>
+          <h2 id="create-title">Project baru</h2>
+          <p class="sheet-sub" id="create-sub">Template siap edit atau rencana prompt untuk AI</p>
+        </div>
+        <button class="icon" id="create-close" type="button" aria-label="Tutup">✕</button>
+      </header>
+
+      <form class="create-form" id="create-form">
+        <div class="mode-row" id="create-modes">
+          <button class="mode is-active" type="button" data-mode="template">Template</button>
+          <button class="mode" type="button" data-mode="prompt">Rencana AI</button>
+        </div>
+
+        <label class="field">
+          <span>Nama project</span>
+          <input id="create-name" type="text" maxlength="80" placeholder="Konten Baru" autocomplete="off" required>
+        </label>
+
+        <label class="field">
+          <span>Niche <i>opsional</i></span>
+          <input id="create-niche" type="text" maxlength="30" placeholder="sejarah" autocomplete="off">
+        </label>
+
+        <div class="prompt-fields" id="create-prompt-fields" hidden>
+          <div class="field-row">
+            <label class="field">
+              <span>Durasi (dtk)</span>
+              <input id="create-duration" type="number" value="45" min="10" max="300" step="1">
+            </label>
+            <label class="field">
+              <span>Audio</span>
+              <input id="create-voices" type="number" value="1" min="1" max="12" step="1">
+            </label>
+            <label class="field">
+              <span>Scene</span>
+              <input id="create-scenes" type="number" value="8" min="3" max="24" step="1">
+            </label>
+          </div>
+          <p class="field-note" id="create-hint">
+            Hasilnya project + <code>prompt.txt</code> berisi rencana scene. Copy isinya ke AI,
+            lalu tempel <code>scene.js</code> hasilnya di tab File.
+          </p>
+        </div>
+
+        <p class="create-note" id="create-note"></p>
+
+        <div class="create-actions">
+          <button class="ghost" id="create-cancel" type="button">Batal</button>
+          <button class="save" id="create-submit" type="submit">Buat project</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <footer class="foot">
+    <span>LPTech · lokal</span>
+    <span id="updated"></span>
+  </footer>
+</body>
+</html>

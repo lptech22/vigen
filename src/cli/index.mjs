@@ -25,6 +25,7 @@ ${color.bold('Perintah')}
   check [project]   Audit teks agar 100% di dalam safe area
   still             Render satu frame jadi PNG
   test              Render video uji 5 detik + validasi
+  ui                Web UI lokal (127.0.0.1) untuk lihat project + aksi
   version           Tampilkan versi
   help              Tampilkan bantuan ini
 
@@ -227,6 +228,11 @@ export async function main(argv) {
   if (cmd === 'test') {
     const { testCommand } = await import('./test.mjs');
     return testCommand(rest);
+  }
+
+  if (cmd === 'ui') {
+    const { uiCommand } = await import('./ui.mjs');
+    return uiCommand(rest);
   }
 
   process.stderr.write(`${color.red('✗')} perintah tidak dikenal: ${cmd}\n\n`);
