@@ -4,7 +4,7 @@
 
 > *Tulis naskah. Vigen bikin videonya.*
 
-Status: **v0.7.0** — diorama isometrik bercerita: kamera virtual, 12 prop, 5 karakter, scene `diorama`/`adegan`, subtitle karaoke per kata, prompt + validasi + audit scene dunia, di atas pipeline audio deterministik, QC, dan `make` idempoten.
+Status: **v0.8.0** — web UI lokal (`vigen ui`): dashboard project, aksi render dengan progres live dan batal, editor `scene.js` + backup, pemutar video, QC, dan caption, di atas pipeline deterministik v0.7.0.
 
 ---
 
@@ -66,6 +66,7 @@ Engine sengaja disimpan di `~/.vigen` (tersembunyi dari file manager/Galeri Andr
 | `vigen check "Konten 2"` | Audit semua teks agar 100% di dalam safe area |
 | `vigen still "Konten 2" --scene s03` | Render satu frame / satu scene jadi PNG |
 | `vigen test` | Render video uji 5 detik + validasi otomatis |
+| `vigen ui` | Web UI lokal `127.0.0.1` (token per sesi): dashboard, aksi, editor, hasil |
 | `vigen version` | Versi engine |
 
 Contoh cepat:
@@ -97,7 +98,28 @@ vigen test
 vigen test --capture jpeg:0.95          # draf cepat
 vigen test --chunk 50 --stop-at 60      # uji resume
 vigen test --force --quiet              # render bersih tanpa progres
+
+vigen ui                                # web UI lokal (buka URL bertoken)
 ```
+
+## Web UI lokal
+
+`vigen ui` menjalankan server di `127.0.0.1` (default port 7788, `--port 0` untuk acak) dan mencetak URL bertoken. Token berganti setiap kali perintah dijalankan dan wajib untuk semua `/api`; server tidak bisa diakses dari perangkat lain.
+
+Isi UI:
+
+- **Dashboard** — workspace, jumlah project per status, pencarian + filter.
+- **Aksi** — Make, Preview, Frame (`still`), Check, Audio, QC, Publish. Job berjalan serial (antrean maks 3), progres frame tampil live, log bisa dibaca, dan tombol Batal menghentikan proses beserta Chromium/ffmpeg-nya.
+- **File** — editor `scene.js`, `script.json`, `sfx.json`, `brief.md`. Simpan membuat `<file>.bak`; JSON divalidasi sebelum ditulis.
+- **Hasil** — pemutar video `out/` (Range, bisa di-seek), ringkasan QC, caption + tombol Copy.
+
+```bash
+vigen ui
+vigen ui --port 0        # port acak
+vigen ui --open          # coba buka via termux-open-url
+```
+
+Tidak ada dependensi npm dan tidak ada CDN; halaman dilayani dari `src/web/public/`.
 
 ## Workspace
 
@@ -478,11 +500,12 @@ Keputusan penting: frame **tidak** dikirim lewat CDP sebagai base64 (mahal), mel
 ~/.vigen/
 ├─ bin/vigen.mjs           launcher CLI
 ├─ src/
-│  ├─ cli/                 doctor, setup, new, prompt, voice, list, timing, audio, subs, render, preview, finish, qc, publish, make, check, still, test
+│  ├─ cli/                 doctor, setup, new, prompt, voice, list, timing, audio, subs, render, preview, finish, qc, publish, make, check, still, test, ui
 │  ├─ core/                config, util, workspace, media (pemilih video + hash)
 │  ├─ story/               storyboard, prompt builder, narration, prepare, subs
 │  ├─ render/              browser (CDP), host, render, encode
 │  ├─ audio/               timeline, mix (ducking + loudnorm), sfx, probe
+│  ├─ web/                 server lokal (token + SSE), job runner, public/ (UI tanpa dependensi)
 │  └─ runtime/stage.html   kanvas, 10 scene + 6 gag, subtitle karaoke, audit safe area
 ├─ tools/                  utilitas dev (bench, snap)
 ├─ docs/                   JOURNAL.md, ROADMAP.md
@@ -501,6 +524,7 @@ Keputusan penting: frame **tidak** dikirim lewat CDP sebagai base64 (mahal), mel
 | v0.5.1 — prompt AI + voice sekali generate (1 audio) | ✅ selesai |
 | v0.6.0 — subtitle, preview, finish, QC, publish, make idempoten | ✅ selesai |
 | v0.7.0 — diorama, kamera, prop, karakter, subtitle karaoke | ✅ selesai |
+| v0.8.0 — web UI lokal (dashboard, aksi + SSE, editor, hasil) | ✅ selesai |
 | v1.0.0 — distribusi GitHub + npm | rencana |
 
 Detail: [`docs/ROADMAP.md`](docs/ROADMAP.md) · Catatan pengembangan: [`docs/JOURNAL.md`](docs/JOURNAL.md)

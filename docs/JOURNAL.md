@@ -765,3 +765,68 @@ ulang dan diverifikasi untuk penutupan rilis.
 
 Catatan dokumen: angka 44,076 dtk / 1322 frame / `9e457a3a…` di entri tahap 8
 adalah render dengan voice uji edge-tts; angka final ada di entri ini.
+
+---
+
+## 20 Nov 2026 — Sesi 2: web UI lokal (v0.8.0)
+
+### 10:40 — Rancangan
+
+Kebutuhan: pengguna tidak perlu menghafal 20 perintah untuk melihat project,
+menjalankan render, mengedit storyboard, dan memeriksa hasil.
+
+Batasan yang dipegang: tanpa dependensi npm, tanpa build step, tetap jalan di
+Termux, dan tidak menyentuh pipeline deterministik.
+
+Keputusan awal: server `node:http` di `127.0.0.1`, token per sesi, dan UI
+HTML/CSS/JS klasik. Alternatif "cetak laporan HTML statis" ditolak karena
+tidak bisa menjalankan aksi atau menampilkan progres.
+
+### 11:00 — Token dan cakupan API
+
+Token `crypto.randomBytes(16)` dicetak di URL (`/?t=…`), lalu diset sebagai
+cookie `HttpOnly; SameSite=Strict`. Semua `/api` menolak tanpa token atau
+cookie; `Authorization: Bearer` dipakai untuk pengujian curl. Bind hanya
+`127.0.0.1` karena di Android aplikasi lain bisa menghubungi loopback; ini
+bukan formalitas.
+
+### 11:05 — Job sebagai proses anak
+
+Rencana awal memanggil modul (`runMake`) langsung. Dibatalkan karena batal
+tidak bisa menghentikan ffmpeg/Chromium yang sedang berjalan. Solusi: spawn
+`node bin/vigen.mjs <aksi> <slug>` dengan `detached: true`, lalu batal =
+`SIGTERM` ke process group dan `SIGKILL` setelah 4 dtk.
+
+Konsekuensi positif: output dijamin sama dengan CLI, UI tetap hidup bila job
+crash, dan log/progres bisa dibaca dari stdout anak. Progres diambil dari baris
+`frame N/M (p%)` yang memang sudah dicetak `renderVideo` — tidak perlu
+mengubah engine.
+
+### 11:15 — Editor dan aset
+
+Editor dibatasi empat file yang memang untuk manusia: `scene.js`,
+`script.json`, `sfx.json`, `brief.md`. Simpan menyalin file lama ke `.bak`,
+menulis lewat `.tmp` + rename, dan menolak JSON rusak. Video memakai endpoint
+`/asset` dengan `Range` supaya bisa di-seek tanpa mengunduh 6 MB.
+
+Uji keamanan: `PUT ../../config.json` → 400; `/asset?p=out/../scene.js` → 400;
+tanpa token → 401.
+
+### Angka uji
+
+- QC dari UI: 13 pemeriksaan, `out/qc.json` tertulis, log 22 baris.
+- `make` dari UI tanpa perubahan: render/QC `skip`, sha256
+  `c5a604f787e7f6275c915377f7c4c44fcddefd285aba47a2b10e69b85b6c681f` tetap.
+- Preview dari UI: progres 46/1223 frame (3,8%); batal → `cancelled` < 1 dtk.
+- Antrean: job kedua `queued` (#1), batal saat antre berhasil; job pertama
+  tetap `done`.
+- Server ditutup saat job jalan: 0 proses Chromium/ffmpeg tersisa.
+- Range `bytes=0-99` → 206 `bytes 0-99/6367290`, panjang 100.
+- `vigen test` tetap 150/150 frame, 5,000 dtk, h264/yuv420p 1080×1920.
+
+### Catatan
+
+- `make` tetap menulis ulang subtitle + caption walau render di-skip; itu
+  perilaku lama dan sengaja tidak diubah.
+- Tampilan panel terlihat lebih terang di screenshot karena penskalaan gambar;
+  nilai `getComputedStyle` tetap `rgb(29, 23, 18)`.

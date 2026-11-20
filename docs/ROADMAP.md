@@ -12,6 +12,7 @@ Rencana berbasis versi. Aturan main: versi berikutnya tidak dimulai sebelum DoD 
 | v0.5.1 | Prompt AI & voice | ✅ selesai |
 | v0.6.0 | Publikasi & QC | ✅ selesai |
 | v0.7.0 | Diorama bercerita | ✅ selesai |
+| v0.8.0 | Web UI lokal | ✅ selesai |
 | v1.0.0 | Distribusi | rencana |
 
 ---
@@ -244,6 +245,43 @@ header bab) dengan topik sejarah.
 - `vigen check` 1223 frame: 7.606 kotak teks, 0 pelanggaran safe area.
 - Voice final sudah dipasang (menggantikan voice uji cloud); `make --force`
   dijalankan ulang dan QC tetap lulus.
+
+## v0.8.0 — Web UI lokal ✅
+
+Dirilis 20 November 2026.
+
+Tujuan: pengguna bisa melihat project, menjalankan pipeline, mengedit
+storyboard, dan memeriksa hasil dari browser HP tanpa menghafal perintah.
+
+| Tahap | Isi | Status |
+|---|---|---|
+| 1 | `vigen ui`, server + token, daftar project + status | ✅ selesai |
+| 2 | Job serial + SSE + aksi + progres frame + batal | ✅ selesai |
+| 3 | Editor file + `.bak`, pemutar video Range, QC, caption | ✅ selesai |
+
+**Keputusan:**
+- Job dijalankan sebagai proses anak dengan process group sendiri. Batal =
+  SIGTERM lalu SIGKILL, sekaligus mematikan Chromium/ffmpeg. Hasil identik
+  dengan CLI karena menjalankan launcher yang sama.
+- Token acak per sesi (`crypto.randomBytes(16)`) lewat cookie HttpOnly
+  SameSite=Strict; `Authorization: Bearer` untuk curl. Bind `127.0.0.1` saja.
+- Tanpa dependensi dan tanpa build step: HTML/CSS/JS klasik dari
+  `src/web/public`, disajikan `node:http`.
+- Editor hanya untuk 4 file (`scene.js`, `script.json`, `sfx.json`,
+  `brief.md`); JSON divalidasi sebelum ditulis, file lama disalin ke `.bak`.
+- Aset hanya boleh dari `out/` dan `voice/`; video memakai `Range` agar bisa
+  di-seek.
+
+**DoD tercapai:**
+- `vigen ui` di Termux: 6 project, filter + pencarian, panel 3 tab.
+- QC via UI: 13 pemeriksaan, `qc.json` tertulis. `make` idempoten: sha256
+  `c5a604f7…` tetap sama sebelum dan sesudah.
+- SSE mengirim snapshot + log + progres; batal saat render berhenti < 1 dtk;
+  antrean maks 3 dan bisa dibatalkan; server ditutup → 0 proses tersisa.
+- `Range: bytes=0-99` → 206; `out/../scene.js` → 400; PUT `../../config.json`
+  → 400; tanpa token → 401.
+- `vigen doctor`, `vigen list`, `vigen test` (150/150) tetap lulus;
+  `package.json` tetap tanpa dependensi.
 
 ## v1.0.0 — Distribusi
 

@@ -2,6 +2,25 @@
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), versi mengikuti [SemVer](https://semver.org/lang/id/).
 
+## [0.8.0] — 2026-11-20
+
+### Ditambahkan
+- `vigen ui`: web UI lokal di `127.0.0.1` dengan token per sesi (cookie HttpOnly + bearer), tanpa dependensi dan tanpa build step.
+- Dashboard: workspace, ringkasan status project, pencarian, filter status, kartu project.
+- Panel project 3 tab:
+  - **Aksi** — Make, Preview, Frame, Check, Audio, QC, Publish; opsi `--force`, `--at`, `QC preview`.
+  - **File** — editor `scene.js`, `script.json`, `sfx.json`, `brief.md` dengan backup `<file>.bak` dan validasi JSON sebelum menyimpan.
+  - **Hasil** — pemutar video `out/` (HTTP Range, bisa di-seek), ringkasan 13 pemeriksaan QC, caption + tombol Copy, daftar file hasil.
+- Job runner serial: antrean maksimal 3, progres frame live lewat SSE, log 1500 baris, tombol Batal.
+- API lokal: `/api/session`, `/api/projects`, `/api/projects/:slug`, `/file`, `/asset`, `/jobs`, `/jobs/:id/events`, `/jobs/:id/cancel`.
+
+### Teknis
+- Job dijalankan sebagai proses anak (`node bin/vigen.mjs …`) dengan process group sendiri; batal mengirim SIGTERM lalu SIGKILL sehingga Chromium/ffmpeg ikut berhenti. Output identik dengan jalur CLI.
+- Aset hanya dari `out/` dan `voice/`; path traversal ditolak. Editor dibatasi whitelist 4 file.
+- `shutdownJobs()` dipanggil saat server ditutup; uji: 0 proses tersisa.
+- Uji lapangan di Termux: QC 13 pemeriksaan, `make` idempoten (sha256 `c5a604f7…` tetap), `still`/`preview` via UI, cancel render < 1 dtk, antrean + cancel antre, Range `0-99` → 206, traversal → 400.
+- `vigen test` 150/150 frame tetap lulus; `package.json` tanpa dependensi.
+
 ## [0.7.0] — 2026-11-20
 
 ### Ditambahkan
