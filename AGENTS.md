@@ -4,72 +4,57 @@ Engine code-to-video vertikal 1080x1920, jalan penuh di Termux Android
 (Node >= 20, FFmpeg libx264, Chromium headless). Repo: github.com/lptech22/vigen
 Versi sekarang: v0.7.0 | Tahap berikutnya: v1.0.0 (distribusi GitHub + npm)
 
-## Cara kerja AI di proyek ini
-- Diskusikan dulu. Eksekusi/ubah file hanya setelah user konfirmasi.
-- Jangan baca seluruh repo. Pakai peta modul di bawah, lalu minta/baca
-  hanya file yang relevan dengan tahap ini.
-- Satu tahap dalam satu waktu. Uji dan pastikan berfungsi sebelum lanjut.
-- Revisi file: kirim FULL file hasil revisi (bukan potongan).
-- Hemat token: log panjang cukup 20 baris terakhir atau pesan error.
-- Setelah tahap selesai: jalankan /selesai-tahap (perbarui catatan proyek).
+## Cara kerja AI
+- Diskusikan dulu; eksekusi/ubah file hanya setelah user konfirmasi. Satu
+  tahap dalam satu waktu, uji sampai berfungsi sebelum lanjut.
+- Jangan baca seluruh repo; pakai peta modul, baca file yang relevan saja.
+- Revisi file: FULL file, bukan potongan. Log panjang: 20 baris terakhir.
+- Setelah tahap selesai: /selesai-tahap (perbarui catatan proyek).
 
 ## Peta modul (src/)
-- cli/      perintah: doctor, setup, new, prompt, voice, list, timing, audio,
-            render, check, still, test, subs/subtitle, preview, finish, qc,
-            publish, make; subtitle-option = opsi --subs bersama
+- cli/      doctor, setup, new, prompt, voice, list, timing, audio, render,
+            check, still, test, subs, preview, finish, qc, publish, make
 - core/     config, media, util, workspace
-- story/    storyboard, prompt builder, narration, prepare, subs (potong subtitle)
-- render/   browser, cdp, host (server lokal), render, encode
+- story/    storyboard, prompt, narration, prepare, subs, styles
+- render/   browser, cdp, host, render, encode
 - audio/    timeline, mix (ducking + loudnorm), sfx, probe
-- runtime/stage.html  kanvas 2D: 10 tipe scene, 6 gag, subtitle karaoke, audit safe area
-- runtime/props.js   12 prop vektor isometrik (window.VigenProps) + helper
-- runtime/cast.js    5 karakter stylized (window.VigenCast) + pose
-- bin/vigen.mjs       launcher CLI | tools/ utilitas dev | test/ pengujian
+- runtime/stage.html  10 tipe scene, 6 gag, subtitle karaoke, audit
+- runtime/props.js    12 prop isometrik + helper | cast.js 5 karakter
+- bin/vigen.mjs launcher | tools/ bench, props-sheet, cast-sheet | test/
 - docs/JOURNAL.md, docs/ROADMAP.md  catatan dan rencana
 
 ## Alur data
-scene.js + voice/ + .work/timeline.json
--> storyboard -> Chromium (canvas, animasi + subtitle = f(t))
--> POST biner /frame ke host Node -> ffmpeg -> segmen mp4 -> concat -> mux audio
-State resume: .work/state.json (storyHash, sudah mencakup subtitle).
-`vigen make`: audio -> subtitle -> render final -> QC -> publish (manifest .work/make.json).
+scene.js + voice/ + timeline -> storyboard -> canvas -> POST /frame -> ffmpeg ->
+segmen -> concat -> mux; `vigen make`: audio -> subs -> render -> QC -> publish.
 
 ## Keputusan yang jangan dibalik
-- Frame dikirim POST biner ke server lokal, BUKAN base64 lewat CDP.
-- Semua animasi murni fungsi waktu f(t) agar render deterministik.
-- Engine di ~/.vigen (filesystem cepat), workspace di /storage/emulated/0/Vigen.
-- Audio: loudnorm 2-pass -14 LUFS; ducking dihitung dari timeline
-  (bukan sidechaincompress).
-- 1 audio = mode single (default); durasi dibagi proporsional jumlah kata.
-- Mux audio tanpa -shortest: apad=whole_dur (audio pendek) dan -t (panjang).
-- QC/publish sah hanya bila out/qc.json dari video final yang sama (bukan _preview/_audio).
-- make idempoten (createdAt diabaikan); preview 540x960 hanya review, QC terpisah.
+- Frame: POST biner ke host lokal, BUKAN base64 lewat CDP.
+- Animasi murni f(t) agar deterministik; kamera hanya gerakkan dunia
+  (teks, header, subtitle diam).
+- Engine di ~/.vigen; workspace di /storage/emulated/0/Vigen.
+- Audio: loudnorm 2-pass -14 LUFS; ducking dari timeline (bukan sidechain).
+  1 audio = mode single; durasi dibagi proporsional jumlah kata.
+- Mux tanpa -shortest: apad=whole_dur (pendek) dan -t (panjang).
+- QC/publish sah hanya bila qc.json dari video final; make idempoten
+  (createdAt diabaikan); preview hanya review.
+- Prop/karakter script klasik, bukan ES module (aman via file://).
+- Style default project baru diorama; tanpa `style` tetap sepia.
+- Subtitle karaoke dari wordTimes, digambar di canvas (bukan filter ffmpeg).
 
 ## Aturan yang harus tetap lulus
 - Safe area teks: x 84-996, y 210-1580 (`vigen check` = 0 pelanggaran).
-- Render ulang dan `make --force` menghasilkan sha256 identik.
-- Output H.264 yuv420p 1080x1920 30fps, jumlah frame tepat (tidak kurang 1).
-- `vigen qc` lulus: -14 LUFS, 0 frame hitam, 0 audio senyap, subtitle <= 2 baris.
-- Jangan timpa file milik user di workspace (setup bersifat idempoten).
+- Render ulang/`make --force` sha256 identik; output H.264 yuv420p 1080x1920
+  30fps, jumlah frame tepat.
+- `vigen qc` lulus: -14 LUFS, 0 frame hitam, 0 audio senyap, subtitle <= 2 baris; jangan timpa file user di workspace (setup idempoten).
 
 ## Sudah dicoba dan gagal
-- Frame base64 lewat CDP: lambat (2,4 fps vs 5,1 fps via POST biner).
-- sidechaincompress untuk ducking: non-deterministik di ffmpeg 9.0.2.
-- Mux dengan -shortest: pembulatan AAC memotong frame terakhir (435 -> 434).
+- base64 lewat CDP: lambat (2,4 fps vs 5,1 fps POST biner).
+- sidechaincompress: ducking non-deterministik di ffmpeg 9.0.2.
+- Mux -shortest: pembulatan AAC memotong frame terakhir (435 -> 434).
+- Prop/karakter ES module: gagal dimuat saat stage.html dibuka via file://.
+- three.js/WebGL: ditolak; canvas 2D pseudo-3D cukup (4-5 fps).
+- JPEG untuk final: hanya preview; final PNG demi determinisme.
 
 ## Status tahap
-- Sekarang: v0.7.0 "Diorama bercerita" — tahap 0–8 selesai (style, kamera, prop, `diorama`, `adegan` + karakter, subtitle karaoke, prompt + validasi + audit, video uji 40,8 dtk).
-- Berikutnya: v1.0.0 (distribusi GitHub + npm).
-- Selesai: v0.1.0 - v0.7.0 (lihat CHANGELOG.md).
-
-## Peta cepat (baca ini dulu, jangan telusuri folder)
-- Tahap saat ini: v1.0.0 (distribusi). Rencana rinci: `docs/ROADMAP.md` bagian v1.0.0.
-- Style: `src/story/styles.mjs` (sepia lama + diorama baru).
-- Prop: `src/runtime/props.js` (12 prop) + preview `tools/props-sheet.mjs`.
-- Karakter: `src/runtime/cast.js` (5 peran) + preview `tools/cast-sheet.mjs`.
-- Scene dunia: renderer `sceneWorld` di `src/runtime/stage.html`; validasi
-  `normalizeProps` / `normalizeCast` / `normalizeCallouts` di
-  `src/story/storyboard.mjs`.
-- Subtitle: logika `src/story/subs.mjs`, CLI `src/cli/subs.mjs`
-- Benchmark: `tools/bench-diorama.mjs` + `tools/bench-stage.html`
-- Detail tahap: `docs/ROADMAP.md`, riwayat: `docs/JOURNAL.md`
+- Sekarang: v1.0.0 (distribusi GitHub + npm), belum dimulai; rencana di `docs/ROADMAP.md`.
+- Selesai: v0.1.0 - v0.7.0 (diorama bercerita, video uji 40,8 dtk); riwayat di CHANGELOG.md + docs/JOURNAL.md.
