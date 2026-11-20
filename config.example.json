@@ -1,6 +1,10 @@
 {
   "configVersion": 1,
-  "engine": { "version": "0.6.0", "name": "Vigen", "vendor": "LPTech" },
+  "engine": {
+    "version": "0.7.0",
+    "name": "Vigen",
+    "vendor": "LPTech"
+  },
   "paths": {
     "ffmpeg": "ffmpeg",
     "ffprobe": "ffprobe",
@@ -11,9 +15,30 @@
     "display": "$PREFIX/share/fonts/TTF/DejaVuSerif-Bold.ttf",
     "ui": "$PREFIX/share/fonts/TTF/DejaVuSans.ttf"
   },
-  "output": { "width": 1080, "height": 1920, "fps": 30, "crf": 20, "preset": "veryfast" },
-  "render": { "chunk": 300, "tempDir": "$TMPDIR/vigen" },
-  "subs": { "enabled": true, "maxChars": 38, "maxLines": 2, "minDuration": 0.55 },
-  "preview": { "scale": 0.5, "crf": 30, "capture": "jpeg:0.92" },
-  "brand": { "watermark": "LPTech", "outro": 1.5 }
+  "output": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "crf": 20,
+    "preset": "veryfast"
+  },
+  "render": {
+    "chunk": 300,
+    "tempDir": "$TMPDIR/vigen"
+  },
+  "subs": {
+    "enabled": true,
+    "maxChars": 38,
+    "maxLines": 2,
+    "minDuration": 0.55
+  },
+  "preview": {
+    "scale": 0.5,
+    "crf": 30,
+    "capture": "jpeg:0.92"
+  },
+  "brand": {
+    "watermark": "LPTech",
+    "outro": 1.5
+  }
 }

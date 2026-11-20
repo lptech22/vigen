@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Vigen props sheet</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #dcc4a0; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<script src="../src/runtime/props.js"></script>
+<script>
+(() => {
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const W = 1080;
+  const H = 1920;
+  const UI = '"DejaVu Sans", sans-serif';
+
+  const SCALE = {
+    map: 0.56, book: 0.78, scroll: 0.82, ship: 0.56,
+    coins: 0.85, scale: 0.56, lantern: 0.78, crate: 0.72,
+    spice: 0.82, compass: 0.95, fort: 0.62, flag: 0.72,
+  };
+
+  const scaleOf = (name) => (
+    window.VigenProps.scaleFor ? window.VigenProps.scaleFor(name) : (SCALE[name] || 0.7)
+  );
+
+  function background() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#f7edda');
+    g.addColorStop(0.6, '#eddcc0');
+    g.addColorStop(1, '#dcc4a0');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    const glow = ctx.createRadialGradient(W * 0.5, 120, 40, W * 0.5, 560, 1100);
+    glow.addColorStop(0, 'rgba(255,246,224,0.55)');
+    glow.addColorStop(1, 'rgba(140,100,60,0.08)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function header() {
+    ctx.save();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#241a12';
+    ctx.font = `700 54px ${UI}`;
+    ctx.fillText('Prop library', 84, 90);
+    ctx.fillStyle = '#c8321e';
+    ctx.fillText('isometrik', 84 + ctx.measureText('Prop library ').width, 90);
+    ctx.font = `400 26px ${UI}`;
+    ctx.fillStyle = 'rgba(36,26,18,0.62)';
+    ctx.fillText('sejarah/diorama · 12 properti · deterministik', 84, 158);
+    ctx.restore();
+  }
+
+  function cell(x, y, name) {
+    ctx.save();
+    ctx.globalAlpha = 0.10;
+    ctx.strokeStyle = '#5a3a1c';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x - 168, y - 300, 336, 396);
+    ctx.restore();
+
+    const drawn = window.VigenProps.draw(ctx, name, {
+      x, y, scale: scaleOf(name), t: 1.4,
+    });
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font = `600 24px ${UI}`;
+    ctx.fillStyle = drawn ? '#241a12' : '#c8321e';
+    ctx.fillText(name, x, y + 66);
+    ctx.restore();
+    return drawn;
+  }
+
+  function draw() {
+    background();
+    header();
+    const names = window.VigenProps.names;
+    const cols = 3;
+    const rowH = 420;
+    let missing = 0;
+    names.forEach((name, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = 190 + col * 350;
+      const y = 430 + row * rowH;
+      if (!cell(x, y, name)) missing++;
+    });
+    return { names, missing };
+  }
+
+  window.boot = async function boot(cfg) {
+    const cw = Number(cfg.width || W);
+    const ch = Number(cfg.height || H);
+    canvas.width = cw;
+    canvas.height = ch;
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+    draw();
+    return true;
+  };
+
+  window.__snapshot = function snapshot() {
+    const info = draw();
+    return {
+      data: canvas.toDataURL('image/png'),
+      names: info.names,
+      missing: info.missing,
+    };
+  };
+})();
+</script>
+</body>
+</html>

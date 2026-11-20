@@ -123,14 +123,28 @@ function scriptTemplate(slug) {
 function sceneTemplate() {
   return `// Storyboard Vigen. Semua teks wajib berada di safe area:
 // x 84..996, y 210..1580. Cek dengan: vigen check "<nama project>"
+// Gaya: 'sejarah/diorama' (default) atau 'sejarah/sepia-archive' (lama).
 export default {
   schema: 1,
-  style: 'sejarah/sepia-archive',
+  style: 'sejarah/diorama',
   brand: { watermark: 'LPTech' },
   scenes: [
     {
       id: 's01',
       type: 'hook',
+      // Header bab: tampil di atas dan bertahan sampai scene berikutnya
+      // mengganti nilainya. highlight = kata yang diberi warna aksen.
+      chapter: {
+        text: 'Kenapa rempah Nusantara diperebutkan dunia?',
+        highlight: 'dunia?',
+      },
+      // Kamera virtual: from/to (atau array keyframe {at,x,y,zoom,rotate}).
+      // content: false = hanya latar yang bergerak, teks tetap diam.
+      camera: {
+        from: { zoom: 1, y: 0 },
+        to: { zoom: 1.06, y: -14 },
+        content: false,
+      },
       narasi: 'Pada 1511, Malaka jatuh ke tangan Portugis. Setidaknya begitu kata catatan resmi.',
       kicker: 'SEJARAH · EP 01',
       title: 'JUDUL EPISODE',
@@ -138,6 +152,58 @@ export default {
     },
     {
       id: 's02',
+      // Scene diorama: dunia isometrik (alas + prop) dengan kamera.
+      // Prop: map, book, scroll, ship, coins, scale, lantern, crate,
+      //       spice, compass, fort, flag.
+      // ground: 'island' | 'table' | 'none'. Teks tetap diam saat kamera bergerak.
+      type: 'diorama',
+      narasi: 'Peta lama menunjukkan jalur yang tidak pernah ada di catatan pelaut.',
+      kicker: 'PETA',
+      title: 'Jalur yang tidak pernah ada',
+      body: 'Garis di peta sering ditambal tangan yang berbeda zaman.',
+      ground: 'island',
+      props: [
+        { name: 'map', x: 540, y: 1030, scale: 0.60 },
+        { name: 'ship', x: 838, y: 1150, scale: 0.40 },
+        { name: 'compass', x: 268, y: 1160, scale: 0.72 },
+      ],
+      camera: {
+        from: { zoom: 1.02, x: 0 },
+        to: { zoom: 1.10, x: -18 },
+        content: true,
+      },
+      source: 'sumber: peta arsip · koleksi',
+    },
+    {
+      id: 's03',
+      // Scene adegan: prop + karakter yang bergerak masuk mengikuti narasi.
+      // Karakter: pedagang, pelaut, serdadu, raja, petani.
+      // pose: 'idle' | 'point' | 'hold'. anim: 'pop' | 'drop' | 'slide' | 'rise'.
+      type: 'adegan',
+      narasi: 'Penjaga benteng menghitung peti, sementara raja menunggu di depan gerbang.',
+      kicker: 'ADEGAN',
+      title: 'Menghitung sebelum fajar',
+      body: 'Peti dibuka satu per satu. Angkanya tidak pernah cocok.',
+      ground: 'island',
+      props: [
+        { name: 'fort', x: 470, y: 980, scale: 0.55, anim: 'drop' },
+        { name: 'crate', x: 700, y: 1120, scale: 0.42 },
+      ],
+      cast: [
+        { who: 'serdadu', x: 350, y: 1170, scale: 0.9, pose: 'point', delay: 0.3 },
+        { who: 'raja', x: 770, y: 1190, scale: 0.9, pose: 'idle', flip: true, delay: 0.5 },
+      ],
+      callouts: [
+        { text: 'Benteng', x: 470, y: 940, dx: -130, dy: -120 },
+      ],
+      camera: {
+        from: { zoom: 1.02, x: 0 },
+        to: { zoom: 1.08, x: 14 },
+        content: true,
+      },
+    },
+    {
+      id: 's04',
       type: 'fact',
       narasi: 'Konon armada hanya menunggu empat puluh hari sebelum angin berubah arah.',
       kicker: 'FAKTA',
@@ -147,7 +213,7 @@ export default {
       source: 'sumber: arsip · catatan',
     },
     {
-      id: 's03',
+      id: 's05',
       type: 'timeline',
       narasi: 'Urutan kejadiannya sering tertukar, dan setiap versi punya pembelanya.',
       kicker: 'GARIS WAKTU',
@@ -160,7 +226,7 @@ export default {
       correction: { was: '1512', year: '1511', text: 'Tahun yang benar.' },
     },
     {
-      id: 's04',
+      id: 's06',
       type: 'punchline',
       narasi: 'Rencananya sempurna. Sayangnya, tidak ada yang membawa peta.',
       setup: 'Dan bagian yang paling masuk akal:',
@@ -169,7 +235,7 @@ export default {
       gag: { type: 'record-scratch', at: 0.2 },
     },
     {
-      id: 's05',
+      id: 's07',
       type: 'outro',
     },
   ],

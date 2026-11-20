@@ -2,6 +2,34 @@
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.1.0/), versi mengikuti [SemVer](https://semver.org/lang/id/).
 
+## [0.7.0] — 2026-11-20
+
+### Ditambahkan
+- Style `sejarah/diorama` (default project baru) dengan latar kertas terang, header bab, dan font sans; style lama `sejarah/sepia-archive` tetap dipakai bila `scene.js` tidak menulis `style`.
+- Field `chapter: { text, highlight }` (atau `false` untuk menghapus) sebagai header bab yang bertahan antar scene.
+- Kamera virtual per scene: `camera: { from, to, ease, content }` atau keyframe `keys`; pan/zoom/rotate dengan easing, `content` mengatur apakah latar ikut bergerak.
+- 12 prop vektor isometrik (`src/runtime/props.js`): map, book, scroll, ship, coins, scale, lantern, crate, spice, compass, fort, flag.
+- 5 karakter stylized (`src/runtime/cast.js`): pedagang, pelaut, serdadu, raja, petani; pose `idle`/`point`/`hold`, `flip`, animasi masuk `pop`/`drop`/`slide`/`rise`.
+- Tipe scene `diorama` (alas `island`/`table`/`none` + prop + kamera) dan `adegan` (tambah `cast` + `callouts`).
+- Subtitle karaoke per kata: `wordTimes` per cue, kata aktif disorot (`subActive`), kata belum diucapkan diredupkan.
+- Prompt builder menyarankan scene dunia sejak rencana scene, memuat daftar prop/karakter, batas koordinat, dan checklist validasi.
+- Alat preview `tools/props-sheet.mjs` dan `tools/cast-sheet.mjs`; benchmark `tools/bench-diorama.mjs`.
+
+### Diperbaiki
+- Validasi menolak `adegan` tanpa cast, `cast`/`callouts` di luar `adegan`, `props`/`ground` di tipe non-dunia, callout > 40 karakter, dan `chapter.highlight` yang bukan bagian dari `chapter.text`.
+- Nama prop/karakter divalidasi saat boot dengan daftar pilihan; nama salah tidak lagi hilang diam-diam.
+- Callout dijepit ke safe area memakai kebalikan transform kamera (`localSafeRect`), jadi chip tidak keluar batas saat zoom.
+- Posisi otomatis memisahkan prop (belakang) dan karakter (depan), lalu mengurutkan berdasarkan `y` untuk kedalaman.
+- `vigen check` menampilkan ringkasan scene dunia dan memeriksa `wordTimes` (jumlah, urutan, rentang cue).
+- `vigen check --json` mengeluarkan JSON murni dengan field `world` dan `validation`.
+
+### Teknis
+- Video uji “Rempah Nusantara”: 40,767 dtk · 1223 frame · 1080×1920 30 fps · h264/yuv420p.
+- QC: **−14,0 LUFS** · −1,4 dBTP · 0 frame hitam · 0 audio senyap · subtitle maks 2 baris/38 karakter.
+- Audit: 1223 frame · 7606 kotak teks · **0 pelanggaran**.
+- `make --force` 3× menghasilkan sha256 identik (`c5a604f7…b6c681f`).
+- Regresi sepia: `vigen test` 2× → sha256 identik (`ee2b4065…30d4305`); nilainya bergeser dari `5e72e3c9…f190a` karena `stage.html` direfaktor di seri ini, bukan karena non-determinisme. Lembar karakter deterministik (`375cb6f2…a4c84`).
+
 ## [0.6.0] — 2026-11-19
 
 ### Ditambahkan

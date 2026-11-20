@@ -11,6 +11,12 @@ export async function startHost({ onFrame }) {
   const stageFile = path.join(ROOT, 'src/runtime/stage.html');
   if (!fs.existsSync(stageFile)) throw new Error(`stage.html tidak ditemukan: ${stageFile}`);
 
+  // Aset runtime yang boleh disajikan (script klasik, same-origin).
+  const runtimeAssets = new Map([
+    ['/props.js', path.join(ROOT, 'src/runtime/props.js')],
+    ['/cast.js', path.join(ROOT, 'src/runtime/cast.js')],
+  ]);
+
   let handler = onFrame;
 
   const server = http.createServer(async (req, res) => {
@@ -23,6 +29,22 @@ export async function startHost({ onFrame }) {
           'Content-Length': html.length,
         });
         res.end(html);
+        return;
+      }
+
+      const asset = runtimeAssets.get(req.url.split('?')[0]);
+      if (req.method === 'GET' && asset) {
+        if (!fs.existsSync(asset)) {
+          res.writeHead(404).end('not found');
+          return;
+        }
+        const body = fs.readFileSync(asset);
+        res.writeHead(200, {
+          'Content-Type': 'application/javascript; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'Content-Length': body.length,
+        });
+        res.end(body);
         return;
       }
 

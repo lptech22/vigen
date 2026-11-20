@@ -2,9 +2,9 @@ import { loadConfig } from '../core/config.mjs';
 import { resolveProject } from '../core/workspace.mjs';
 import { parseArgs, line, section, color, ok, info, warn, bad, pad } from '../core/util.mjs';
 import { prepareStoryboard } from '../story/prepare.mjs';
-import { subtitleStats } from '../story/subs.mjs';
+import { subtitleStats, validateWordTimes } from '../story/subs.mjs';
 import { resolveSubtitleOption } from './subtitle-option.mjs';
-import { subtitleOptionsFrom } from './subs.mjs';
+import { subtitleOptionsFrom, validateSubtitles } from './subs.mjs';
 import { launchBrowser } from '../render/browser.mjs';
 
 function sceneAt(storyboard, t) {
@@ -23,16 +23,45 @@ export async function checkCommand(argv) {
     subsOptions: subtitleOptionsFrom(cfg, flags),
   });
 
+  const subProblems = subOpt.enabled
+    ? [
+      ...validateSubtitles(storyboard.subs || [], subtitleOptionsFrom(cfg, flags)),
+      ...validateWordTimes(storyboard.subs || []),
+    ]
+    : [];
+  const worldScenes = storyboard.scenes.filter((s) => s.type === 'diorama' || s.type === 'adegan');
+  const world = {
+    scenes: worldScenes.length,
+    diorama: worldScenes.filter((s) => s.type === 'diorama').length,
+    adegan: worldScenes.filter((s) => s.type === 'adegan').length,
+    props: worldScenes.reduce((a, s) => a + (s.props?.length || 0), 0),
+    cast: worldScenes.reduce((a, s) => a + (s.cast?.length || 0), 0),
+    callouts: worldScenes.reduce((a, s) => a + (s.callouts?.length || 0), 0),
+  };
+
   const step = Math.max(1, Number(flags.step || 1));
   const totalFrames = Math.max(1, Math.round(storyboard.duration * cfg.output.fps));
   const safe = storyboard.safe;
 
-  line(`${color.bold('Vigen check')} ${color.gray(`— ${project.name}`)}`);
-  info(`safe area: x ${safe.left}–${safe.right} · y ${safe.top}–${safe.bottom}`);
-  info(`audit ${totalFrames} frame (step ${step}) · ${storyboard.duration.toFixed(3)} dtk`);
-  if (subOpt.enabled && storyboard.subs?.length) {
-    const st = subtitleStats(storyboard.subs);
-    ok(`subtitle ikut diaudit: ${st.count} potongan · maks ${st.maxLines} baris`);
+  if (!flags.json) {
+    line(`${color.bold('Vigen check')} ${color.gray(`— ${project.name}`)}`);
+    info(`safe area: x ${safe.left}–${safe.right} · y ${safe.top}–${safe.bottom}`);
+    info(`audit ${totalFrames} frame (step ${step}) · ${storyboard.duration.toFixed(3)} dtk`);
+    if (subOpt.enabled && storyboard.subs?.length) {
+      const st = subtitleStats(storyboard.subs);
+      ok(`subtitle ikut diaudit: ${st.count} potongan · maks ${st.maxLines} baris`);
+    }
+    if (world.scenes) {
+      info(`scene dunia: ${world.scenes} (${world.diorama} diorama · ${world.adegan} adegan) `
+        + `· ${world.props} prop · ${world.cast} cast · ${world.callouts} callout`);
+    }
+    if (subProblems.length) {
+      bad(`subtitle/timing: ${subProblems.length} masalah`);
+      for (const p of subProblems.slice(0, 8)) line(`  ${p}`);
+      if (subProblems.length > 8) info(`… dan ${subProblems.length - 8} masalah lain`);
+    } else if (subOpt.enabled && storyboard.subs?.length) {
+      ok('timing kata konsisten (wordTimes)');
+    }
   }
 
   const browser = await launchBrowser(cfg, {
@@ -84,9 +113,11 @@ export async function checkCommand(argv) {
       framesAudited: audited,
       boxes: boxCount,
       safe,
+      world,
+      validation: subProblems,
       violations: list,
     }, null, 2) + '\n');
-    return list.length ? 1 : 0;
+    return list.length || subProblems.length ? 1 : 0;
   }
 
   section('Audit teks');
@@ -94,7 +125,7 @@ export async function checkCommand(argv) {
 
   if (!list.length) {
     ok('semua teks berada di dalam safe area.');
-    return 0;
+    return subProblems.length ? 1 : 0;
   }
 
   bad(`${list.length} elemen keluar safe area`);

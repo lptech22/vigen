@@ -11,6 +11,7 @@ Rencana berbasis versi. Aturan main: versi berikutnya tidak dimulai sebelum DoD 
 | v0.5.0 | Visual & humor | ✅ selesai |
 | v0.5.1 | Prompt AI & voice | ✅ selesai |
 | v0.6.0 | Publikasi & QC | ✅ selesai |
+| v0.7.0 | Diorama bercerita | ✅ selesai |
 | v1.0.0 | Distribusi | rencana |
 
 ---
@@ -121,6 +122,128 @@ Rencana berbasis versi. Aturan main: versi berikutnya tidak dimulai sebelum DoD 
 - QC draf menulis `qc-preview.json`, bukan `qc.json`, supaya hasil draf tidak dianggap sebagai QC final saat `publish`.
 - `make` memakai `.work/make.json` berisi fingerprint input dan output. Fingerprint timeline **mengabaikan `createdAt`**, karena timeline dihitung ulang setiap perintah; tanpa itu `make` akan membangun ulang audio terus-menerus.
 - `make` dan `finish` berhenti lebih awal bila `voice/` kosong dan `out/audio.wav` belum ada, dengan saran memakai `--no-audio`; ini menghemat render yang pasti gagal QC.
+
+## v0.7.0 — Diorama bercerita ✅
+
+Dirilis 20 November 2026.
+
+Tujuan: video tidak lagi kartu teks statis. Adopsi bahasa visual referensi
+(diorama isometrik, kamera sinematik, objek beranimasi, karakter minimal,
+header bab) dengan topik sejarah.
+
+| Tahap | Isi | Status |
+|---|---|---|
+| 0 | Benchmark diorama (prop + karakter + kamera) | ✅ 4,0 fps PNG / 5,7 fps JPEG |
+| 1 | Style `sejarah/diorama` + header bab + font sans | ✅ selesai |
+| 2 | Kamera virtual (pan/zoom/rotate, keyframe) | ✅ selesai |
+| 3 | Prop library vektor isometrik | ✅ selesai (12 prop) |
+| 4 | Tipe scene `diorama` (dunia + kamera + prop) | ✅ selesai |
+| 5 | Tipe scene `adegan` (aksi objek + callout + karakter) | ✅ selesai |
+| 6 | Subtitle karaoke per kata | ✅ selesai |
+| 7 | Prompt builder + validasi + audit | ✅ selesai |
+| 8 | Video uji sejarah 30–45 dtk + determinisme + QC | ✅ 40,8 dtk · 1223 frame · QC lulus |
+
+**Keputusan tahap 1:**
+- Dua style: `sejarah/sepia-archive` (lama, default untuk scene.js tanpa style)
+  dan `sejarah/diorama` (default project baru via template/prompt).
+- Header bab memakai field `chapter: { text, highlight }`; bertahan sampai scene
+  berikutnya mengganti, dan hilang otomatis di outro. Posisi y=210 (opsi B).
+- Konten scene lama digeser 48px saat header aktif agar tidak bertumpuk.
+- Font display diorama memakai sans (VigenUI), bukan serif.
+
+**Keputusan tahap 3:**
+- Prop tinggal di `src/runtime/props.js` sebagai script klasik (`window.VigenProps`),
+  bukan ES module, supaya tetap termuat saat `stage.html` dibuka via `file://`
+  (`vigen still` / `vigen check`).
+- 12 prop awal: map, book, scroll, ship, coins, scale, lantern, crate, spice,
+  compass, fort, flag. Semua vektor 2D dengan proyeksi isometrik (`isoBox`,
+  `boxFaces`, `shadow`), tanpa Math.random.
+- Animasi prop hanya fungsi `t` lokal (ombak kapal, nyala lentera, jarum
+  timbangan) agar render tetap deterministik.
+- Host menyajikan `/props.js` dari `src/render/host.mjs`; alat preview
+  `tools/props-sheet.mjs` merender semua prop ke satu PNG.
+
+**Keputusan tahap 4:**
+- Scene `diorama` = alas isometrik (`ground`: `island` | `table` | `none`) +
+  prop + teks di atasnya. Alas digambar lebih dulu, teks selalu di atas.
+- Koordinat prop memakai px layar, lalu diproyeksikan ke permukaan alas
+  (`plateLocal` → `plateProject`) dan dijepit ke tepi, jadi prop tidak pernah
+  melayang. Tanpa `x`/`y`, prop disusun otomatis di atas alas.
+- Kamera scene diorama hanya menggerakkan lapisan dunia; teks, header, dan
+  subtitle tetap diam. `content` default `true` untuk diorama (kebalikan scene
+  lain) agar penulis tidak perlu menuliskannya.
+- Latar halaman ikut kamera hanya bila `content` true, supaya dunia dan latar
+  bergerak sebagai satu kesatuan.
+- Nama prop divalidasi saat boot runtime (`window.VigenProps.has`); nama salah
+  langsung gagal dengan daftar pilihan, bukan hilang diam-diam.
+- Kedalaman digambar dengan mengurutkan prop berdasarkan `y` (makin besar makin
+  depan), sehingga tumpang tindih terlihat benar.
+- Permukaan alas diberi cahaya lembut dan butir tanah memakai `mulberry32`
+  dengan seed tetap, jadi tekstur tetap deterministik.
+
+**Keputusan tahap 5:**
+- Scene `adegan` memakai alas + prop yang sama dengan `diorama`, ditambah
+  `cast` (karakter) dan `callouts` (label penunjuk).
+- Karakter tinggal di `src/runtime/cast.js` (`window.VigenCast`), script klasik
+  seperti props.js. 5 peran: pedagang, pelaut, serdadu, raja, petani.
+- Gaya "stylized": vektor berbayang, tanpa wajah realistis dan tanpa 3D —
+  cukup ringan untuk render di tablet.
+- Pose `idle` / `point` / `hold`; `flip` membalik arah hadap. Gerak hanya
+  f(t): napas, goyangan badan, langkah kecil.
+- Animasi masuk objek: `pop` (default), `drop`, `slide`, `rise`. Semua
+  dihitung dari `delay` + `t`, bukan timer.
+- Posisi otomatis dipisah: prop di baris belakang (`v=-0.35`), karakter di
+  baris depan (`v=0.40`), lalu diurutkan berdasarkan `y` untuk kedalaman.
+- Callout digambar di dalam transform kamera agar menempel ke objek, tetapi
+  posisinya dijepit memakai kebalikan transform (`localSafeRect`) sehingga
+  chip tetap di dalam safe area walau kamera zoom.
+- Nama karakter divalidasi saat boot seperti prop; nama salah langsung gagal.
+- Kecepatan: scene adegan penuh (4 prop + 2 karakter + 2 callout + kamera)
+  ≈ 4,3 fps PNG 1080×1920 — masih di level benchmark (4,0 fps).
+
+**Keputusan tahap 6:**
+- Setiap cue subtitle menyimpan `wordTimes: [{ text, start, end }]`. Waktunya
+  dibagi rata di dalam cue, setara dengan porsi global `wiStart..wiEnd`,
+  sehingga total tetap sama dengan durasi narasi dan tidak ada kata yang
+  tumpang tindih.
+- Runtime mewarnai kata per kata: sudah diucapkan = `subInk`, sedang diucapkan
+  = `subActive` (emas di sepia, merah di diorama), belum = `subInkFaint`.
+- Posisi kata dihitung dari `block.lines` yang sudah ada, jadi pembungkusan
+  baris, ukuran font, latar chip, dan audit safe area tidak berubah.
+- Bila `wordTimes` tidak ada atau jumlahnya tidak cocok dengan jumlah kata,
+  runtime kembali ke penggambaran biasa (kompatibel dengan storyboard lama).
+- SRT/ASS tidak terpengaruh: keduanya tetap memakai `lines`.
+
+**Keputusan tahap 7:**
+- Prompt menyarankan `diorama`/`adegan` sejak rencana scene (bukan hanya di
+  catatan), lengkap dengan saran visual per tipe. Untuk 3 scene, dunia tetap
+  opsional; 4 scene ke atas minimal 1 scene dunia.
+- Prompt memuat aturan scene dunia yang sama dengan validator: daftar prop/
+  karakter, batas 12 prop / 6 cast / 4 callout, rentang koordinat, `delay`,
+  `anim`, dan larangan menaruh field dunia di tipe yang salah.
+- Validasi baru: `adegan` wajib minimal 1 cast; `cast`/`callouts` hanya di
+  `adegan`; `props`/`ground` hanya di `diorama`/`adegan`; teks callout ≤ 40
+  karakter; `chapter` divalidasi (text ≤ 70, highlight harus bagian dari text,
+  `false` untuk menghapus).
+- `vigen check` menampilkan ringkasan scene dunia (jumlah scene, prop, cast,
+  callout) dan memeriksa `wordTimes` (jumlah kata, urutan, rentang cue) di
+  samping batas 2 baris subtitle.
+- `vigen check --json` sekarang mengeluarkan JSON murni (tanpa baris info),
+  dengan field tambahan `world` dan `validation`.
+
+**Keputusan tahap 8:**
+- Video uji memakai topik “Kenapa rempah Nusantara diperebutkan?” dengan
+  style `sejarah/diorama`, 3 scene dunia (2 diorama + 1 adegan), 15 subtitle.
+- Narasi 75 kata, voice uji awal edge-tts `id-ID-GadisNeural` 42,6 dtk, lalu
+  diganti voice final 39,3 dtk; total video 40,8 dtk termasuk outro — masuk
+  target 30–45 dtk.
+- QC final: H.264 yuv420p 1080×1920 30 fps, 1223 frame, **−14,0 LUFS**,
+  −1,4 dBTP, 0 frame hitam, 0 audio senyap, subtitle maks 2 baris/38 karakter.
+- `make --force` tiga kali menghasilkan sha256 identik
+  (`c5a604f7…b6c681f`); `qc.json` dan `publish.json` menunjuk video yang sama.
+- `vigen check` 1223 frame: 7.606 kotak teks, 0 pelanggaran safe area.
+- Voice final sudah dipasang (menggantikan voice uji cloud); `make --force`
+  dijalankan ulang dan QC tetap lulus.
 
 ## v1.0.0 — Distribusi
 

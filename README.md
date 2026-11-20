@@ -4,7 +4,7 @@
 
 > *Tulis naskah. Vigen bikin videonya.*
 
-Status: **v0.6.0** — subtitle narasi (SRT/ASS), `preview`, `finish`, `qc`, `publish`, dan `make` idempoten, di atas storyboard 8 scene + 6 gag, audio deterministik, dan audit safe area.
+Status: **v0.7.0** — diorama isometrik bercerita: kamera virtual, 12 prop, 5 karakter, scene `diorama`/`adegan`, subtitle karaoke per kata, prompt + validasi + audit scene dunia, di atas pipeline audio deterministik, QC, dan `make` idempoten.
 
 ---
 
@@ -255,6 +255,18 @@ Hasil uji v0.6.0 (project 4 scene + outro, 14,500 dtk):
 | Subtitle | 5 potongan · maks **2 baris** · maks 37 karakter |
 | Publish | `caption.txt` + `publish.json` · video 1080×1920 |
 
+Hasil uji v0.7.0 (project “Rempah Nusantara”, 8 scene + outro):
+
+| Uji | Hasil |
+|---|---|
+| Durasi / frame | **40,767 dtk** · **1223 frame** |
+| Scene dunia | 2 `diorama` + 1 `adegan` · 9 prop · 2 cast · 2 callout |
+| Subtitle | 15 potongan karaoke · maks **2 baris** / 38 karakter |
+| Audit | 1223 frame · 7.606 kotak · **0 pelanggaran** |
+| QC final | `−14,0 LUFS` · `−1,4 dBTP` · 0 frame hitam · 0 audio senyap |
+| Determinisme | `make --force` 3× → sha256 identik (`c5a604f7…b6c681f`) |
+| Voice | narasi final 39,3 dtk (+ outro 1,5 dtk) |
+
 ## Alur AI: prompt → scene.js → voice
 
 Sejak v0.5.1, AI hanya perlu mengembalikan **satu file** (`scene.js`). Token lebih hemat dan tidak ada duplikasi teks.
@@ -350,7 +362,39 @@ export default {
 | `stat` | `value`, `unit`, `label`, `source` |
 | `deadpan` | `text` (atau `body`), `aside` |
 | `punchline` | `setup`, `text` (atau `title`), `pause` |
+| `diorama` | `ground`, `props`, `camera` |
+| `adegan` | `ground`, `props`, `cast`, `callouts`, `camera` |
 | `outro` | otomatis: brand, tagline, niche |
+
+**Scene dunia** (`diorama` / `adegan`):
+
+```js
+{
+  id: 's03', type: 'adegan', narasi: '...',
+  chapter: { text: 'Pasar rempah', highlight: 'Pasar' },
+  kicker: 'PASAR', title: 'Tawar-menawar di dermaga',
+  body: 'Timbangan menentukan harga sebelum kapal berlayar.',
+  ground: 'island',                       // island | table | none
+  props: [
+    { name: 'scale', x: 540, y: 1090, scale: 0.62, delay: 0.1 },
+    { name: 'crate', x: 800, y: 1150, scale: 0.44, anim: 'drop' },
+  ],
+  cast: [
+    { who: 'pedagang', x: 320, y: 1180, scale: 0.9, pose: 'point' },
+    { who: 'pelaut', x: 760, y: 1190, scale: 0.9, pose: 'hold', flip: true },
+  ],
+  callouts: [
+    { text: 'Timbangan', x: 540, y: 1040, dx: 150, dy: -110 },
+  ],
+  camera: { from: { zoom: 1.02 }, to: { zoom: 1.08, x: -12 }, content: true },
+}
+```
+
+- Prop: `map`, `book`, `scroll`, `ship`, `coins`, `scale`, `lantern`, `crate`, `spice`, `compass`, `fort`, `flag` (maks 12).
+- Karakter: `pedagang`, `pelaut`, `serdadu`, `raja`, `petani` (maks 6, `adegan` minimal 1).
+- `pose`: `idle` / `point` / `hold`; `flip` membalik arah; `anim`: `pop` / `drop` / `slide` / `rise`.
+- `callouts` maks 4, teks ≤ 40 karakter. Titik `(x,y)` menunjuk objek, chip digeser `(dx,dy)`.
+- Camera scene dunia hanya menggerakkan lapisan dunia; teks, header, dan subtitle tetap diam.
 
 **Gag** (boleh satu objek atau array di `gags`):
 
@@ -368,6 +412,9 @@ Aturan penting:
 - `id` scene sebaiknya sama dengan nama file voice (tanpa ekstensi). Bila tidak ada yang cocok, urutan index dipakai dengan peringatan; bila sebagian cocok dan sebagian tidak, render ditolak.
 - `duration` opsional; tanpa voice, tiap tipe punya durasi default. Scene terakhir otomatis ditambah outro 1,5 dtk bila belum ada.
 - Safe area teks: **x 84–996, y 210–1580**. Watermark dan progress bar di luar area audit.
+- `chapter: { text, highlight }` bertahan sampai scene berikutnya mengganti; `chapter: false` menghapusnya, outro selalu menghapus.
+- `camera` per scene memakai `{ from, to, ease, content }` atau `keys`; zoom 1–1.2, rotate −3..3 derajat. Default `content: false`, kecuali scene dunia (`true`).
+- Nama prop/karakter divalidasi saat boot; nama di luar daftar langsung gagal dengan pilihan yang tersedia.
 - `punchline` menahan teks dan gag-nya selama jeda `0,4` dtk supaya terasa deadpan.
 - Tata letak gag sadar teks: struk selalu jadi lower-third, vinyl di pita atas, chat bubble naik menghindari `aside`.
 - `vigen check` mengaudit bounding box setiap elemen teks di setiap frame; `vigen render` membatalkan diri pada frame pertama yang melanggar dan menyebut id elemennya.
@@ -436,7 +483,7 @@ Keputusan penting: frame **tidak** dikirim lewat CDP sebagai base64 (mahal), mel
 │  ├─ story/               storyboard, prompt builder, narration, prepare, subs
 │  ├─ render/              browser (CDP), host, render, encode
 │  ├─ audio/               timeline, mix (ducking + loudnorm), sfx, probe
-│  └─ runtime/stage.html   kanvas, 8 scene + 6 gag, subtitle, audit safe area
+│  └─ runtime/stage.html   kanvas, 10 scene + 6 gag, subtitle karaoke, audit safe area
 ├─ tools/                  utilitas dev (bench, snap)
 ├─ docs/                   JOURNAL.md, ROADMAP.md
 └─ test/
@@ -453,6 +500,7 @@ Keputusan penting: frame **tidak** dikirim lewat CDP sebagai base64 (mahal), mel
 | v0.5.0 — storyboard, sepia-archive, 8 scene, 6 gag, safe-area QC | ✅ selesai |
 | v0.5.1 — prompt AI + voice sekali generate (1 audio) | ✅ selesai |
 | v0.6.0 — subtitle, preview, finish, QC, publish, make idempoten | ✅ selesai |
+| v0.7.0 — diorama, kamera, prop, karakter, subtitle karaoke | ✅ selesai |
 | v1.0.0 — distribusi GitHub + npm | rencana |
 
 Detail: [`docs/ROADMAP.md`](docs/ROADMAP.md) · Catatan pengembangan: [`docs/JOURNAL.md`](docs/JOURNAL.md)

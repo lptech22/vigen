@@ -2,7 +2,7 @@
 
 Engine code-to-video vertikal 1080x1920, jalan penuh di Termux Android
 (Node >= 20, FFmpeg libx264, Chromium headless). Repo: github.com/lptech22/vigen
-Versi sekarang: v0.6.0 | Tahap berikutnya: v1.0.0 (distribusi GitHub + npm)
+Versi sekarang: v0.7.0 | Tahap berikutnya: v1.0.0 (distribusi GitHub + npm)
 
 ## Cara kerja AI di proyek ini
 - Diskusikan dulu. Eksekusi/ubah file hanya setelah user konfirmasi.
@@ -21,7 +21,9 @@ Versi sekarang: v0.6.0 | Tahap berikutnya: v1.0.0 (distribusi GitHub + npm)
 - story/    storyboard, prompt builder, narration, prepare, subs (potong subtitle)
 - render/   browser, cdp, host (server lokal), render, encode
 - audio/    timeline, mix (ducking + loudnorm), sfx, probe
-- runtime/stage.html  kanvas 2D: 8 tipe scene, 6 gag, subtitle, audit safe area
+- runtime/stage.html  kanvas 2D: 10 tipe scene, 6 gag, subtitle karaoke, audit safe area
+- runtime/props.js   12 prop vektor isometrik (window.VigenProps) + helper
+- runtime/cast.js    5 karakter stylized (window.VigenCast) + pose
 - bin/vigen.mjs       launcher CLI | tools/ utilitas dev | test/ pengujian
 - docs/JOURNAL.md, docs/ROADMAP.md  catatan dan rencana
 
@@ -56,10 +58,18 @@ State resume: .work/state.json (storyHash, sudah mencakup subtitle).
 - Mux dengan -shortest: pembulatan AAC memotong frame terakhir (435 -> 434).
 
 ## Status tahap
-- Sekarang: belum ada tahap yang dimulai (v1.0.0 masih rencana).
-- Selesai: v0.1.0 - v0.6.0 (lihat CHANGELOG.md).
+- Sekarang: v0.7.0 "Diorama bercerita" — tahap 0–8 selesai (style, kamera, prop, `diorama`, `adegan` + karakter, subtitle karaoke, prompt + validasi + audit, video uji 40,8 dtk).
+- Berikutnya: v1.0.0 (distribusi GitHub + npm).
+- Selesai: v0.1.0 - v0.7.0 (lihat CHANGELOG.md).
 
 ## Peta cepat (baca ini dulu, jangan telusuri folder)
-- Tahap saat ini: v0.6.0 selesai (subtitle, preview, finish, qc, publish, make). Berikutnya: v1.0.0.
+- Tahap saat ini: v1.0.0 (distribusi). Rencana rinci: `docs/ROADMAP.md` bagian v1.0.0.
+- Style: `src/story/styles.mjs` (sepia lama + diorama baru).
+- Prop: `src/runtime/props.js` (12 prop) + preview `tools/props-sheet.mjs`.
+- Karakter: `src/runtime/cast.js` (5 peran) + preview `tools/cast-sheet.mjs`.
+- Scene dunia: renderer `sceneWorld` di `src/runtime/stage.html`; validasi
+  `normalizeProps` / `normalizeCast` / `normalizeCallouts` di
+  `src/story/storyboard.mjs`.
 - Subtitle: logika `src/story/subs.mjs`, CLI `src/cli/subs.mjs`
+- Benchmark: `tools/bench-diorama.mjs` + `tools/bench-stage.html`
 - Detail tahap: `docs/ROADMAP.md`, riwayat: `docs/JOURNAL.md`

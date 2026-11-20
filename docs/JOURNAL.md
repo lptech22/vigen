@@ -510,3 +510,258 @@ Uji `finish "Konten 1" --no-audio --subs`: 495/495 frame, subtitle 6 potongan ma
 - `publish` membandingkan `qc.path`/`qc.file` dengan video yang akan dipublikasikan; QC dari file lain dianggap belum lulus.
 - `make --no-audio` menandai audio nonaktif di `renderKey`, sehingga video beraudio lama tidak dianggap sama dengan video senyap.
 - `finish` tetap merender ulang setiap dipanggil; idempotensi adalah tanggung jawab `make`.
+
+## 20 Nov 2026 — v0.7.0 tahap 0–1
+
+### Benchmark diorama
+
+Referensi `refrensiuntukvigen.mp4` (720×1280, 30 fps, 103,7 dtk) dibedah:
+6 bab, hanya ~10 cut keras, kamera bergerak di dalam satu dunia 3D, objek
+beranimasi, callout, badge, subtitle karaoke. Keputusan: pseudo-3D canvas 2D,
+bukan three.js.
+
+Alat baru: `tools/bench-stage.html` + `tools/bench-diorama.mjs`.
+Hasil di Xiaomi Pad 5 (1080×1920, 30 fps, CRF 20):
+
+| Mode | fps | ms/frame | draw | encode | kirim+ffmpeg |
+|---|---|---|---|---|---|
+| teks PNG | 4,7 | 214 | 1 | 140 | 53 |
+| diorama PNG | 4,0 | 248 | 3 | 168 | 56 |
+| diorama JPEG q95 | 5,7 | 175 | 4 | 140 | 20 |
+
+Prop + karakter hanya +2–3 ms. Bottleneck = encode PNG. Putusan: lanjut,
+final tetap PNG (deterministik), preview JPEG.
+
+### Style + header
+
+- `src/story/styles.mjs`: daftar style, default project baru `sejarah/diorama`.
+- `scene.js` tanpa `style` tetap sepia (project lama aman).
+- Runtime: token palet per style, background kertas hangat + berkas cahaya,
+  font sans untuk diorama, subtitle putih, overlay outro terang.
+- Header bab `chapter: { text, highlight }`, y=210, persist antar scene,
+  hilang di outro. Konten lama digeser 48px saat header aktif.
+- Template `vigen new` dan prompt memakai diorama + contoh chapter.
+
+Validasi: `vigen test` 2 dtk dua kali → sha256 identik; 3 still diorama dua kali
+→ identik; audit semua 8 tipe scene di diorama (134 sampel) → 0 pelanggaran.
+
+## 20 Nov 2026 — v0.7.0 tahap 2: kamera virtual
+
+Skema `camera` per scene:
+- `{ from, to, ease, content }` atau `{ keys: [{ at, x, y, zoom, rotate }] }`.
+- `at` 0..1 (relatif durasi scene), default ease `inOut`.
+- Batas validasi: zoom 0.5..2, rotate ±15°, x ±600, y ±900, maks 12 keyframe.
+- `content: true` membuat teks ikut kamera (untuk uji); default false agar teks diam
+  seperti referensi, hanya latar/dunia yang bergerak.
+
+Runtime:
+- `cameraAt(sc, u)` interpolasi keyframe dengan easing linear/inOut/out.
+- Latar digambar dengan transform kamera; pan otomatis dijepit agar tepi tidak
+  kosong, rotasi menambah zoom minimum.
+- `applySceneCamera` disiapkan untuk lapisan dunia (dipakai tahap 4).
+- Kamera scene pertama yang aktif memimpin latar; header dan subtitle tidak ikut.
+
+Validasi: 4 still kamera 2× render → sha256 identik; audit seluruh frame scene
+dengan kamera konten → 0 pelanggaran; `vigen test` sepia tetap
+`5e72e3c9…f190a` (tidak berubah).
+
+## 20 Nov 2026 — v0.7.0 tahap 3: prop library isometrik
+
+File baru:
+- `src/runtime/props.js` — 12 prop vektor + helper isometrik
+  (`isoBox`, `boxFaces`, `shadow`, `isoEllipse`, `paperGrain`).
+- `tools/props-sheet.html` + `tools/props-sheet.mjs` — lembar preview 3x4.
+- `src/render/host.mjs` — menyajikan `/props.js` (same-origin, no-store).
+
+API: `window.VigenProps.draw(ctx, name, { x, y, scale, rotate, alpha, t })`,
+`names`, `has(name)`, `colors`. Dimuat sebagai script klasik agar `file://`
+(`vigen still`, `vigen check`) tetap jalan tanpa server.
+
+Prop: map, book, scroll, ship, coins, scale, lantern, crate, spice, compass,
+fort, flag. Semua deterministik (tanpa Math.random); animasi hanya f(t):
+kapal mengangguk + layar, lentera berdenyut, jarum timbangan bergoyang,
+bendera berkibar.
+
+Perbaikan saat review visual: label sel tidak lagi menimpa prop, tali peti
+dipotong mengikuti sisi kotak (`boxFaces`), tumpukan rempah ditambah agar
+tidak terlihat kosong.
+
+Validasi: `node tools/props-sheet.mjs` → 12 prop, hilang 0; render 2x →
+sha256 identik (`242eabf4…ed36`). `vigen test` sepia tetap
+`5e72e3c9…f190a` (tidak berubah).
+
+## 20 Nov 2026 — v0.7.0 tahap 4: tipe scene `diorama`
+
+Skema scene baru:
+
+```js
+{
+  id: 's02', type: 'diorama', narasi: '...',
+  kicker: 'PETA', title: '...', body: '...', source: '...',
+  ground: 'island',            // island | table | none
+  props: [
+    { name: 'map', x: 540, y: 1030, scale: 0.60 },
+    { name: 'ship', x: 838, y: 1150, scale: 0.40, rotate: -8, delay: 0.3 },
+  ],
+  camera: { from: { zoom: 1.02 }, to: { zoom: 1.10, x: -18 } },
+}
+```
+
+- Prop boleh string saja (`'coins'`) → disusun otomatis di atas alas.
+- `x`/`y` adalah koordinat layar, diproyeksikan ke permukaan alas dan dijepit;
+  prop tidak pernah melayang di luar alas.
+- Urutan gambar: alas → prop (urut `y`, makin besar makin depan) → teks.
+- Kamera scene diorama hanya menggerakkan dunia; teks/header/subtitle diam.
+  `content` default `true` untuk diorama, `false` untuk tipe lain.
+- Nama prop salah → boot gagal dengan pesan berisi daftar prop yang valid.
+
+Perubahan pendukung: `SCENE_TYPES` + `DEFAULT_DURATION.diorama` (4,4 dtk),
+`normalizeProps` (maks 12, batas x/y/scale/rotate/alpha/delay), template
+`vigen new` dapat scene diorama contoh, prompt builder mendokumentasikan tipe
+dan prop, `VigenProps.scaleFor()` dipakai bersama oleh runtime dan props sheet.
+
+Validasi: 3 still (island, table, outro) 2× render → sha256 identik; audit
+seluruh 393 frame storyboard uji → 0 pelanggaran; `vigen test` sepia tetap
+`5e72e3c9…f190a`. Tekstur alas memakai `mulberry32` seed tetap sehingga
+lembar prop (`242eabf4…ed36`) tidak berubah.
+
+## 20 Nov 2026 — v0.7.0 tahap 5: scene `adegan` + karakter
+
+Skema scene baru:
+
+```js
+{
+  id: 's03', type: 'adegan', narasi: '...',
+  kicker: 'ADEGAN', title: '...', body: '...', source: '...',
+  ground: 'island',
+  props: [{ name: 'fort', x: 470, y: 980, scale: 0.55, anim: 'drop' }],
+  cast: [
+    { who: 'serdadu', x: 350, y: 1170, scale: 0.9, pose: 'point', delay: 0.3 },
+    { who: 'raja', x: 770, y: 1190, scale: 0.9, pose: 'idle', flip: true },
+  ],
+  callouts: [{ text: 'Benteng', x: 470, y: 940, dx: -130, dy: -120 }],
+}
+```
+
+File baru: `src/runtime/cast.js` (5 peran stylized: pedagang, pelaut, serdadu,
+raja, petani) + `tools/cast-sheet.html` / `.mjs` untuk preview. Host menyajikan
+`/cast.js`.
+
+- Pose `idle` / `point` / `hold`; `flip` membalik arah. Gerak f(t): napas,
+  goyangan, langkah kecil. Tanpa Math.random.
+- Animasi masuk: `pop` | `drop` | `slide` | `rise` (dipakai prop dan karakter).
+- Callout: titik jangkar + garis + chip teks. Chip dijepit ke safe area memakai
+  kebalikan transform kamera (`localSafeRect`) agar tidak melewati batas saat
+  kamera zoom.
+- Auto-layout dipisah: prop di belakang, karakter di depan, lalu diurutkan
+  berdasarkan `y` untuk kedalaman.
+- Validasi: cast maks 6, pose terbatas, callout maks 4 dan wajib `text`,
+  `anim` terbatas. Nama karakter salah → boot gagal dengan daftar pilihan.
+
+Perbaikan saat uji: audit sempat menemukan `callout:1 kanan 0px` karena chip
+digambar di dalam zoom kamera; diperbaiki dengan menjepit di koordinat lokal.
+
+Validasi: 3 still adegan 2× render → sha256 identik; audit 405 frame → 0
+pelanggaran; lembar karakter 2× → sha256 identik (`375cb6f2…4c84`); scene
+diorama tetap deterministik dan 0 pelanggaran; `vigen test` sepia tetap
+`5e72e3c9…f190a`; template `vigen new` (7 scene, termasuk adegan) valid.
+Kecepatan scene adegan penuh: 30 frame PNG dalam 7,0 s ≈ 4,3 fps (233 ms/frame).
+
+## 20 Nov 2026 — v0.7.0 tahap 6: subtitle karaoke per kata
+
+`buildSubtitles` kini menambahkan `wordTimes` per cue:
+
+```js
+{ id: 's02:sub1', text: '...', lines: [...], start, end,
+  wordTimes: [{ text: 'Cengkih', start: 3.10, end: 3.41 }, ...] }
+```
+
+Waktu kata dibagi rata di dalam cue (setara porsi global `wiStart..wiEnd`),
+dibulatkan 3 desimal seperti field lain. Tidak ada perubahan pada `lines`,
+SRT, atau ASS.
+
+Runtime (`drawSubtitles` + `drawKaraoke`) menggambar kata satu per satu:
+lewat = `subInk`, aktif = `subActive` (emas `#ffd45e` di sepia, merah `#c8321e`
+di diorama), belum = `subInkFaint`. Posisi dihitung dari `block.lines` yang
+sudah ada, jadi ukuran font, pembungkusan 2 baris, latar chip, dan audit
+`recordBox` tetap sama. Bila `wordTimes` tidak ada / jumlahnya tidak cocok,
+kembali ke `drawBlock` biasa.
+
+Validasi: 4 still karaoke 2× render → sha256 identik; audit 261 frame → 0
+pelanggaran; `vigen test` 2× → tetap `5e72e3c9…f190a` (project uji tanpa
+narasi, jadi jalur subtitle tidak berubah); `subtitleStats` tetap maks 2 baris.
+
+## 20 Nov 2026 — v0.7.0 tahap 7: prompt builder + validasi + audit
+
+Prompt (`src/story/prompt.mjs`):
+- Rencana scene kini menyarankan `diorama`/`adegan` sejak awal
+  (hook → diorama → fact → adegan → … → punchline), dengan saran visual per
+  tipe. Video 3 scene boleh tanpa scene dunia; 4 scene ke atas minimal satu.
+- Bagian "SCENE DUNIA" baru: daftar prop/karakter, batas 12 prop / 6 cast /
+  4 callout, rentang koordinat, `delay`, `anim`, aturan kamera, dan larangan
+  field dunia di tipe yang salah. Contoh adegan ikut ditambahkan.
+- Chapter: text ≤ 70, highlight harus bagian dari text, maks ± 6 bab.
+
+Validasi (`src/story/storyboard.mjs`):
+- `adegan` wajib minimal 1 cast.
+- `cast`/`callouts` hanya di `adegan`; `props`/`ground` hanya di
+  `diorama`/`adegan` — field nyasar sekarang gagal jelas, bukan diabaikan.
+- Teks callout maks 40 karakter.
+- `chapter` dinormalisasi: string, `{ text, highlight }`, atau `false`.
+  Highlight yang bukan bagian dari text ditolak.
+
+Audit (`src/cli/check.mjs`, `src/story/subs.mjs`):
+- `validateWordTimes` memeriksa jumlah kata, urutan waktu, dan rentang cue.
+- `vigen check` menampilkan ringkasan scene dunia + validasi subtitle.
+- `--json` sekarang JSON murni dengan field `world` dan `validation`.
+
+Validasi: template 7 scene (2 scene dunia) lolos; 5 project lama diperiksa
+(konten kosong tetap kosong, 3 project berisi valid); `vigen check` pada project
+template: 765 frame, 335 kotak, 0 pelanggaran, wordTimes konsisten; karaoke 4
+still 2× deterministik, audit 261 frame 0 pelanggaran; `vigen test` tetap
+`5e72e3c9…f190a`.
+
+## 20 Nov 2026 — v0.7.0 tahap 8: video uji “Rempah Nusantara”
+
+Project baru: `/storage/emulated/0/Vigen/Rempah Nusantara` (style
+`sejarah/diorama`, 8 scene + outro).
+
+- Narasi 75 kata / 533 karakter; 3 scene dunia: 2 diorama (peta, rempah,
+  kapal; benteng, bendera, kapal) + 1 adegan (pedagang, pelaut, timbangan,
+  peti, koin, 2 callout).
+- Chapter: “Rempah Nusantara”, “Harga dan perang”, “Benteng di pulau”,
+  “Harga dunia”; scene punchline memakai `chapter: false`.
+- Voice uji: edge-tts `id-ID-GadisNeural`, rate +32% → 42,576 dtk.
+- Durasi final 44,076 dtk (1322 frame), termasuk outro 1,5 dtk.
+- `vigen check`: 1322 frame, 8.365 kotak teks, 0 pelanggaran; subtitle 15
+  potongan, maks 2 baris.
+- `vigen make --force` 2×: sha256 video identik
+  `9e457a3a6739d454f0ee94da9791558fe46ee93a73891dec360f5ea907bef0fb`.
+- QC lulus: h264/yuv420p/1080×1920/30fps, 1322 frame, 44,067 dtk,
+  −14,0 LUFS, −1,7 dBTP, 0 frame hitam, 0 audio senyap, subtitle ≤ 2 baris.
+- `publish.json` + `caption.txt` terisi dari `script.json`.
+
+Catatan: voice uji memakai TTS cloud untuk menguji pipeline. Setelah itu voice
+diganti voice final dan `make --force` dijalankan ulang (lihat entri berikutnya).
+
+## 20 Nov 2026 — v0.7.0 rilis: voice final, determinisme, tag
+
+Voice uji edge-tts diganti narasi final (39,264 dtk), lalu pipeline dijalankan
+ulang dan diverifikasi untuk penutupan rilis.
+
+- Durasi final 40,767 dtk · 1223 frame · 1080×1920 30 fps.
+- `vigen check`: 1223 frame · 7.606 kotak teks · **0 pelanggaran**; subtitle
+  15 potongan, maks 2 baris/38 karakter; 3 scene dunia (9 prop, 2 cast,
+  2 callout); `wordTimes` konsisten.
+- `vigen make --force` 3× (10:09, 10:34, 10:39) → sha256 identik
+  `c5a604f787e7f6275c915377f7c4c44fcddefd285aba47a2b10e69b85b6c681f`.
+- QC lulus: −14,0 LUFS · −1,4 dBTP · 0 frame hitam · 0 audio senyap ·
+  subtitle ≤ 2 baris. `publish.json` + `caption.txt` menunjuk video yang sama,
+  `.work/make.json` sudah `engine 0.7.0`.
+- Determinisme lain: `vigen test` 2× → `ee2b4065…30d4305`; lembar karakter
+  2× → `375cb6f2…a4c84`. Hash uji bergeser dari `5e72e3c9…f190a` yang tercatat
+  di entri tahap sebelumnya — sebabnya `stage.html` ikut direfaktor pada seri
+  0.7.0, bukan non-determinisme (dua render berurutan tetap identik).
+
+Catatan dokumen: angka 44,076 dtk / 1322 frame / `9e457a3a…` di entri tahap 8
+adalah render dengan voice uji edge-tts; angka final ada di entri ini.

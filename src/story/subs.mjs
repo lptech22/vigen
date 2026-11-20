@@ -146,15 +146,25 @@ export function buildSubtitles(storyboard, options = {}) {
         : scene.start + duration * (unit.wiEnd / total);
       const lines = wrapWords(unit.words, opts.maxChars);
       const textOut = unit.words.join(' ');
+      const safeEnd = Math.max(end, start + 0.01);
+      // Timing per kata untuk subtitle karaoke. Dibagi rata di dalam cue
+      // (setara dengan porsi global wiStart..wiEnd), tetap deterministik.
+      const step = (safeEnd - start) / unit.words.length;
+      const wordTimes = unit.words.map((w, k) => ({
+        text: w,
+        start: r3(start + step * k),
+        end: r3(start + step * (k + 1)),
+      }));
       subs.push({
         id: `${scene.id}:sub${i + 1}`,
         sceneId: scene.id,
         text: textOut,
         lines,
         start: r3(start),
-        end: r3(Math.max(end, start + 0.01)),
+        end: r3(safeEnd),
         duration: r3(Math.max(0.01, end - start)),
         words: unit.words.length,
+        wordTimes,
       });
     });
   }
@@ -178,6 +188,48 @@ export function subtitleStats(subs) {
     words: list.reduce((a, s) => a + (s.words || 0), 0),
   };
 }
+
+/**
+ * Periksa konsistensi `wordTimes` (subtitle karaoke). Cue lama tanpa
+ * `wordTimes` dianggap sah (runtime memakai penggambaran biasa).
+ */
+export function validateWordTimes(subs) {
+  const problems = [];
+  for (const s of Array.isArray(subs) ? subs : []) {
+    const wt = s.wordTimes;
+    if (wt === undefined) continue;
+    if (!Array.isArray(wt)) {
+      problems.push(`${s.id}: wordTimes harus array`);
+      continue;
+    }
+    const total = words(s.text || (s.lines || []).join(' ')).length;
+    if (wt.length !== total) {
+      problems.push(`${s.id}: wordTimes ${wt.length} kata, teks ${total} kata`);
+    }
+    let prev = -Infinity;
+    for (let i = 0; i < wt.length; i++) {
+      const w = wt[i];
+      const at = `${s.id}: wordTimes #${i + 1}`;
+      if (!w || typeof w !== 'object') {
+        problems.push(`${at} bukan objek`);
+        continue;
+      }
+      if (!w.text) problems.push(`${at} tanpa text`);
+      if (!Number.isFinite(w.start) || !Number.isFinite(w.end)) {
+        problems.push(`${at} start/end bukan angka`);
+        continue;
+      }
+      if (w.end <= w.start) problems.push(`${at} end <= start`);
+      if (w.start < s.start - 0.002 || w.start > s.end + 0.002 || w.end > s.end + 0.002) {
+        problems.push(`${at} keluar rentang cue`);
+      }
+      if (w.start < prev - 0.002) problems.push(`${at} waktu mundur`);
+      prev = w.start;
+    }
+  }
+  return problems;
+}
+
 
 function srtTime(t) {
   const ms = Math.max(0, Math.round(Number(t) * 1000));

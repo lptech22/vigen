@@ -10,6 +10,8 @@
 </head>
 <body>
 <canvas id="stage"></canvas>
+<script src="./props.js"></script>
+<script src="./cast.js"></script>
 <script>
 (() => {
   'use strict';
@@ -18,9 +20,10 @@
   const ctx = canvas.getContext('2d', { alpha: false });
 
   const UI = 'VigenUI, sans-serif';
-  const DISPLAY = 'VigenDisplay, "DejaVu Serif", serif';
+  const SERIF = 'VigenDisplay, "DejaVu Serif", serif';
+  let DISPLAY = SERIF;
 
-  const C = {
+  const SEPIA = {
     bgTop: '#15100b',
     bgMid: '#21170f',
     bgBottom: '#2b1d13',
@@ -34,7 +37,50 @@
     paper: 'rgba(235,220,190,0.96)',
     paperInk: '#332414',
     paperInkSoft: '#5a432c',
+    subBg: 'rgba(9,6,4,0.78)',
+    subBorder: 'rgba(201,162,39,0.30)',
+    subInk: '#f2e6c9',
+    subActive: '#ffd45e',
+    subInkFaint: 'rgba(242,230,201,0.42)',
+    dust: '242,230,201',
+    watermark: 'rgba(242,230,201,0.38)',
+    headerInk: '#f2e6c9',
+    headerAccent: '#d4553f',
+    outroOverlay: 'rgba(10,7,4,0.58)',
   };
+
+  const DIORAMA = {
+    bgTop: '#f7edda',
+    bgMid: '#eddcc0',
+    bgBottom: '#dcc4a0',
+    ink: '#241a12',
+    inkSoft: 'rgba(36,26,18,0.74)',
+    inkFaint: 'rgba(36,26,18,0.46)',
+    gold: '#a86a24',
+    goldSoft: 'rgba(168,106,36,0.42)',
+    line: 'rgba(36,26,18,0.16)',
+    stamp: '#c8321e',
+    paper: 'rgba(253,249,240,0.96)',
+    paperInk: '#241a12',
+    paperInkSoft: '#5d4a38',
+    subBg: 'rgba(253,249,240,0.96)',
+    subBorder: 'rgba(36,26,18,0.14)',
+    subInk: '#241a12',
+    subActive: '#c8321e',
+    subInkFaint: 'rgba(36,26,18,0.38)',
+    dust: '120,88,48',
+    watermark: 'rgba(60,40,20,0.42)',
+    headerInk: '#241a12',
+    headerAccent: '#c8321e',
+    outroOverlay: 'rgba(247,237,218,0.70)',
+  };
+
+  const STYLE_TOKENS = {
+    'sejarah/sepia-archive': { display: SERIF, header: false, colors: SEPIA },
+    'sejarah/diorama': { display: UI, header: true, colors: DIORAMA },
+  };
+
+  let C = SEPIA;
 
   const FALLBACK_SAFE = { left: 84, right: 996, top: 210, bottom: 1580 };
 
@@ -51,6 +97,8 @@
     safe: FALLBACK_SAFE,
     punchlinePause: 0.4,
     storyboard: null,
+    styleId: 'sejarah/sepia-archive',
+    styleHeader: false,
     subs: [],
     subsActive: false,
     boxes: [],
@@ -226,6 +274,10 @@
 
   // ---------- background arsip ----------
   function buildBackground(w, h) {
+    if (state.styleId === 'sejarah/diorama') {
+      buildBackgroundDiorama(w, h);
+      return;
+    }
     const c = document.createElement('canvas');
     c.width = w;
     c.height = h;
@@ -296,6 +348,82 @@
     state.bg = c;
   }
 
+  // ---------- background diorama ----------
+  function buildBackgroundDiorama(w, h) {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const g = c.getContext('2d');
+
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, C.bgTop);
+    grad.addColorStop(0.58, C.bgMid);
+    grad.addColorStop(1, C.bgBottom);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, w, h);
+
+    // cahaya hangat dari atas
+    const glow = g.createRadialGradient(w * 0.5, h * 0.10, 40, w * 0.5, h * 0.42, h * 0.85);
+    glow.addColorStop(0, 'rgba(255,246,224,0.55)');
+    glow.addColorStop(0.45, 'rgba(255,240,210,0.18)');
+    glow.addColorStop(1, 'rgba(140,100,60,0.10)');
+    g.fillStyle = glow;
+    g.fillRect(0, 0, w, h);
+
+    // berkas cahaya lembut
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 6; i++) {
+      const x = 90 + i * 185;
+      const beam = g.createLinearGradient(x, 0, x + 90, h * 0.72);
+      beam.addColorStop(0, 'rgba(255,248,230,0.16)');
+      beam.addColorStop(1, 'rgba(255,248,230,0)');
+      g.fillStyle = beam;
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.lineTo(x + 120, 0);
+      g.lineTo(x + 210, h * 0.72);
+      g.lineTo(x + 40, h * 0.72);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+
+    const rnd = mulberry32(0x0d10a3);
+    // serat kertas
+    for (let i = 0; i < 3400; i++) {
+      const x = rnd() * w;
+      const y = rnd() * h;
+      const a = 0.010 + rnd() * 0.035;
+      g.fillStyle = rnd() > 0.45 ? `rgba(255,250,238,${a})` : `rgba(90,60,30,${a * 0.7})`;
+      const s = rnd() > 0.94 ? 2 : 1;
+      g.fillRect(x, y, s, s);
+    }
+    // noda kertas halus
+    for (let i = 0; i < 40; i++) {
+      const x = rnd() * w;
+      const y = rnd() * h;
+      const r = 60 + rnd() * 260;
+      const a = 0.010 + rnd() * 0.018;
+      const blob = g.createRadialGradient(x, y, 0, x, y, r);
+      blob.addColorStop(0, `rgba(120,80,40,${a})`);
+      blob.addColorStop(1, 'rgba(120,80,40,0)');
+      g.fillStyle = blob;
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+    }
+
+    // vignette tepi
+    const vig = g.createRadialGradient(w * 0.5, h * 0.46, w * 0.35, w * 0.5, h * 0.5, h * 0.78);
+    vig.addColorStop(0, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, 'rgba(70,42,16,0.22)');
+    g.fillStyle = vig;
+    g.fillRect(0, 0, w, h);
+
+    state.bg = c;
+  }
+
   function drawDust(t) {
     const w = state.width;
     const h = state.height;
@@ -304,7 +432,7 @@
       const x = ((hash(seed) * (w + 80) + t * (4 + hash(seed + 2) * 14)) % (w + 80)) - 40;
       const y = (hash(seed + 5) * h + Math.sin(t * 0.4 + seed) * 14 + h) % h;
       const a = 0.025 + hash(seed + 9) * 0.07;
-      ctx.fillStyle = `rgba(242,230,201,${a})`;
+      ctx.fillStyle = `rgba(${C.dust},${a})`;
       ctx.beginPath();
       ctx.arc(x, y, 1 + hash(seed + 1) * 1.6, 0, Math.PI * 2);
       ctx.fill();
@@ -317,7 +445,7 @@
     if (!state.watermark) return;
     ctx.save();
     setFont(26, '400', UI, 2);
-    ctx.fillStyle = 'rgba(242,230,201,0.38)';
+    ctx.fillStyle = C.watermark;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(state.watermark, w - 84, h - 270);
@@ -338,6 +466,46 @@
 
   const SUB_BOTTOM = 1544;
   const SUB_MAX_W = 860;
+
+  /**
+   * Subtitle karaoke: kata yang sedang diucapkan disorot.
+   * Lewat = subInk, aktif = subActive, belum = subInkFaint.
+   * Mengembalikan false bila `wordTimes` tidak ada / jumlahnya tidak cocok.
+   */
+  function drawKaraoke(sub, block, x, top, t) {
+    const wt = sub.wordTimes;
+    const parts = block.lines.map((l) => String(l).split(' ').filter(Boolean));
+    const flat = parts.flat();
+    if (!Array.isArray(wt) || !wt.length || wt.length !== flat.length) return false;
+
+    const active = wt.findIndex((w) => t >= w.start && t < w.end);
+    const done = t >= wt[wt.length - 1].end;
+
+    ctx.save();
+    setFont(block.size, '600', UI, 0);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    const space = ctx.measureText(' ').width;
+    let idx = 0;
+    for (let li = 0; li < parts.length; li++) {
+      const widths = parts[li].map((p) => ctx.measureText(p).width);
+      const lineW = widths.reduce((a, b) => a + b, 0) + space * Math.max(0, widths.length - 1);
+      let px = x - lineW / 2;
+      const py = top + li * block.size * block.lineHeight;
+      for (let k = 0; k < parts[li].length; k++) {
+        const i = idx++;
+        if (i === active) ctx.fillStyle = C.subActive;
+        else if (i < active || done) ctx.fillStyle = C.subInk;
+        else ctx.fillStyle = C.subInkFaint;
+        ctx.fillText(parts[li][k], px, py);
+        px += widths[k] + space;
+      }
+    }
+    ctx.restore();
+
+    recordBox(`${sub.id}`, x - block.width / 2, top, block.width, block.height * 0.98);
+    return true;
+  }
 
   function drawSubtitles(t) {
     const list = state.subs || [];
@@ -370,18 +538,156 @@
     const top = SUB_BOTTOM - h;
 
     ctx.save();
-    ctx.fillStyle = 'rgba(9,6,4,0.78)';
+    ctx.fillStyle = C.subBg;
     roundRect(540 - w / 2, top, w, h, 12);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(201,162,39,0.30)';
+    ctx.strokeStyle = C.subBorder;
     ctx.lineWidth = 1;
     roundRect(540 - w / 2, top, w, h, 12);
     ctx.stroke();
     ctx.restore();
 
-    drawBlock(`${sub.id}`, block, 540, top + 13, {
-      align: 'center', color: C.ink, weight: '600', family: UI,
+    const drew = drawKaraoke(sub, block, 540, top + 13, t);
+    if (!drew) {
+      drawBlock(`${sub.id}`, block, 540, top + 13, {
+        align: 'center', color: C.subInk, weight: '600', family: UI,
+      });
+    }
+  }
+
+  // ---------- kamera virtual ----------
+  function cameraEase(p, ease) {
+    if (ease === 'linear') return p;
+    if (ease === 'out') return 1 - Math.pow(1 - p, 3);
+    return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+  }
+
+  function cameraAt(sc, u) {
+    const cam = sc && sc.camera;
+    if (!cam || !Array.isArray(cam.keys) || !cam.keys.length) return null;
+    const p = clamp01(u / Math.max(0.0001, sc.duration));
+    const keys = cam.keys;
+    let a = keys[0];
+    let b = keys[keys.length - 1];
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (p >= keys[i].at && p <= keys[i + 1].at) {
+        a = keys[i];
+        b = keys[i + 1];
+        break;
+      }
+    }
+    const local = b.at > a.at ? (p - a.at) / (b.at - a.at) : 0;
+    const e = cameraEase(clamp01(local), cam.ease);
+    return {
+      x: a.x + (b.x - a.x) * e,
+      y: a.y + (b.y - a.y) * e,
+      zoom: a.zoom + (b.zoom - a.zoom) * e,
+      rotate: a.rotate + (b.rotate - a.rotate) * e,
+      content: Boolean(cam.content),
+    };
+  }
+
+  function drawBackground(cam) {
+    if (!state.bg) {
+      ctx.fillStyle = C.bgTop;
+      ctx.fillRect(0, 0, state.width, state.height);
+      return;
+    }
+    if (!cam) {
+      ctx.drawImage(state.bg, 0, 0);
+      return;
+    }
+    const rot = (cam.rotate * Math.PI) / 180;
+    // rotasi butuh sedikit zoom tambahan agar sudut tidak kosong
+    const zoom = Math.max(cam.zoom, 1 + Math.abs(rot) * 0.9);
+    const maxX = ((zoom - 1) * state.width) / 2;
+    const maxY = ((zoom - 1) * state.height) / 2;
+    const x = Math.max(-maxX, Math.min(maxX, cam.x));
+    const y = Math.max(-maxY, Math.min(maxY, cam.y));
+    ctx.save();
+    ctx.translate(state.width / 2, state.height / 2);
+    ctx.rotate(rot);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-state.width / 2 + x, -state.height / 2 + y);
+    ctx.drawImage(state.bg, 0, 0);
+    ctx.restore();
+  }
+
+  function applySceneCamera(cam) {
+    if (!cam || !cam.content) return;
+    ctx.translate(state.width / 2, state.height / 2);
+    ctx.rotate((cam.rotate * Math.PI) / 180);
+    ctx.scale(cam.zoom, cam.zoom);
+    ctx.translate(-state.width / 2 + cam.x, -state.height / 2 + cam.y);
+  }
+
+  // ---------- header bab ----------
+  function chapterKey(ch) {
+    if (!ch) return '';
+    if (typeof ch === 'string') return ch;
+    return `${ch.text || ''}|${ch.highlight || ''}`;
+  }
+
+  function chapterAt(t) {
+    const scenes = state.storyboard?.scenes || [];
+    let chapter = null;
+    let key = '';
+    let since = 0;
+    for (const s of scenes) {
+      if (s.start > t + 0.0001) break;
+      if (s.type === 'outro' || s.chapter === false) {
+        chapter = null;
+        key = '';
+        since = s.start;
+        continue;
+      }
+      if (!s.chapter) continue;
+      const k = chapterKey(s.chapter);
+      if (k !== key) {
+        key = k;
+        chapter = s.chapter;
+        since = s.start;
+      }
+    }
+    return { chapter, since };
+  }
+
+  function drawChapter(t, info) {
+    if (!state.styleHeader) return;
+    const ch = info && info.chapter;
+    if (!ch) return;
+    const text = typeof ch === 'string' ? ch : String(ch.text || '');
+    const highlight = typeof ch === 'string' ? '' : String(ch.highlight || '');
+    if (!text) return;
+
+    const p = easeOut(span(t, info.since, 0.55));
+    if (p <= 0.001) return;
+
+    const block = fitBlock(text, {
+      maxWidth: 912, maxLines: 2, base: 46, min: 30, lineHeight: 1.18,
+      weight: '700', family: DISPLAY, spacing: 0,
     });
+    const top = 210 + (1 - p) * 12;
+
+    drawBlock('chapter:title', block, 84, top, {
+      align: 'left', color: C.headerInk, alpha: p, weight: '700', family: DISPLAY,
+    });
+
+    if (!highlight) return;
+    ctx.save();
+    ctx.globalAlpha *= p;
+    setFont(block.size, '700', DISPLAY, 0);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = C.headerAccent;
+    for (let i = 0; i < block.lines.length; i++) {
+      const line = block.lines[i];
+      const idx = line.indexOf(highlight);
+      if (idx < 0) continue;
+      const dx = idx > 0 ? ctx.measureText(line.slice(0, idx)).width : 0;
+      ctx.fillText(highlight, 84 + dx, top + i * block.size * block.lineHeight);
+    }
+    ctx.restore();
   }
 
   // ---------- scene ----------
@@ -727,6 +1033,391 @@
     }
   }
 
+  // ---------- scene diorama ----------
+  function mixPt(a, b, k) {
+    return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+  }
+
+  function insetQuad(pts, k) {
+    const cx = (pts[0][0] + pts[1][0] + pts[2][0] + pts[3][0]) / 4;
+    const cy = (pts[0][1] + pts[1][1] + pts[2][1] + pts[3][1]) / 4;
+    return pts.map(([x, y]) => [x + (cx - x) * k, y + (cy - y) * k]);
+  }
+
+  function quadPath(pts) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+  }
+
+  // Geometri alas diorama. Prop ditempatkan dengan koordinat layar (x,y) lalu
+  // diproyeksikan ke permukaan alas agar tidak pernah melayang.
+  const PLATE = { w: 600, d: 400, h: 46 };
+  const ISO_COS = Math.cos(Math.PI / 6);
+
+  function plateGeom(cy) {
+    const ux = ISO_COS * PLATE.w;
+    const uy = 0.5 * PLATE.w;
+    const vx = -ISO_COS * PLATE.d;
+    const vy = 0.5 * PLATE.d;
+    return {
+      ...PLATE, ux, uy, vx, vy,
+      cx: 540 + (ux + vx) / 2,
+      cy,
+      cx0: 540,
+      cy0: cy - PLATE.h - (uy + vy) / 2,
+    };
+  }
+
+  function plateProject(g, u, v) {
+    return {
+      x: g.cx0 + (u * g.ux + v * g.vx) / 2,
+      y: g.cy0 + (u * g.uy + v * g.vy) / 2,
+    };
+  }
+
+  /** Ubah titik layar menjadi koordinat alas (u,v), dijepit di dalam tepi. */
+  function plateLocal(g, x, y) {
+    const sx = (x - g.cx0) * 2;
+    const sy = (y - g.cy0) * 2;
+    const det = g.ux * g.vy - g.vx * g.uy;
+    const u = (sx * g.vy - sy * g.vx) / det;
+    const v = (g.ux * sy - g.uy * sx) / det;
+    return {
+      u: Math.max(-0.98, Math.min(0.98, u)),
+      v: Math.max(-0.98, Math.min(0.98, v)),
+    };
+  }
+
+  /** Alas dunia: pulau tanah atau meja kayu. */
+  function dioramaGround(kind, g) {
+    const VP = window.VigenProps;
+    if (!VP) return;
+
+    ctx.save();
+    ctx.translate(g.cx0, g.cy + 10);
+    VP.shadow(ctx, g.w * 0.70, 108, 0.24);
+    ctx.restore();
+
+    if (kind === 'table') {
+      const f = VP.isoBox(ctx, g.cx, g.cy, g.w, g.d, g.h, {
+        top: '#c79a68', left: '#8d6238', right: '#a97b4c', line: 'rgba(74,46,20,0.40)',
+      });
+      ctx.save();
+      ctx.strokeStyle = 'rgba(90,58,28,0.18)';
+      ctx.lineWidth = 2;
+      for (const k of [0.25, 0.5, 0.75]) {
+        const a = mixPt(f.top[0], f.top[1], k);
+        const b = mixPt(f.top[3], f.top[2], k);
+        ctx.beginPath();
+        ctx.moveTo(a[0], a[1]);
+        ctx.lineTo(b[0], b[1]);
+        ctx.stroke();
+      }
+      // tepi meja lebih terang
+      ctx.strokeStyle = 'rgba(255,232,196,0.45)';
+      ctx.lineWidth = 2;
+      quadPath(f.top);
+      ctx.stroke();
+      ctx.restore();
+      plateLight(g, f.top);
+      return;
+    }
+
+    // pulau: tanah berumput dengan sisi gelap
+    const f = VP.isoBox(ctx, g.cx, g.cy, g.w, g.d, g.h, {
+      top: '#cdb287', left: '#9c8158', right: '#856b46', line: 'rgba(60,42,22,0.40)',
+    });
+    ctx.save();
+    quadPath(insetQuad(f.top, 0.055));
+    ctx.fillStyle = 'rgba(226,204,166,0.55)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(96,70,38,0.28)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // lapisan tanah di sisi
+    ctx.strokeStyle = 'rgba(52,36,18,0.22)';
+    ctx.lineWidth = 2;
+    for (const k of [0.45, 0.75]) {
+      const a = mixPt(f.left[0], f.left[3], k);
+      const b = mixPt(f.left[1], f.left[2], k);
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+      ctx.stroke();
+      const c = mixPt(f.right[0], f.right[3], k);
+      const e = mixPt(f.right[1], f.right[2], k);
+      ctx.beginPath();
+      ctx.moveTo(c[0], c[1]);
+      ctx.lineTo(e[0], e[1]);
+      ctx.stroke();
+    }
+    ctx.restore();
+    plateLight(g, f.top, true);
+  }
+
+  /** Cahaya lembut + butir tanah di permukaan alas (deterministik). */
+  function plateLight(g, top, speckles = false) {
+    ctx.save();
+    quadPath(top);
+    ctx.clip();
+    const grd = ctx.createRadialGradient(
+      g.cx0 - 130, g.cy0 - 90, 40,
+      g.cx0, g.cy0, 660,
+    );
+    grd.addColorStop(0, 'rgba(255,246,224,0.20)');
+    grd.addColorStop(1, 'rgba(80,54,26,0.10)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, state.width, state.height);
+
+    if (speckles) {
+      const rnd = mulberry32(0x0d10a7);
+      for (let i = 0; i < 52; i++) {
+        const u = (rnd() * 2 - 1) * 0.94;
+        const v = (rnd() * 2 - 1) * Math.max(0, 0.94 - Math.abs(u));
+        const p = plateProject(g, u, v);
+        const r = 2 + rnd() * 5;
+        ctx.fillStyle = i % 3 === 0
+          ? 'rgba(120,96,58,0.10)'
+          : 'rgba(255,248,228,0.15)';
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, r, r * 0.45, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  /** Animasi masuk objek: pop (default), drop, slide, rise. */
+  function entryAt(item, u, fallbackDelay, fallbackAnim) {
+    const delay = item.delay ?? fallbackDelay;
+    const p = clamp01((u - delay) / 0.5);
+    const e = easeOut(p);
+    const anim = item.anim || fallbackAnim;
+    let dx = 0;
+    let dy = 0;
+    if (anim === 'drop') dy = -(1 - e) * 150;
+    else if (anim === 'slide') dx = (1 - e) * (item.px < 540 ? -200 : 200);
+    else if (anim === 'rise') dy = (1 - e) * 70;
+    else dy = (1 - e) * 28;
+    return { e, dx, dy };
+  }
+
+  /** Lapisan dunia: alas + prop + karakter, urut kedalaman. */
+  function drawWorldLayer(sc, u, g) {
+    const VP = window.VigenProps;
+    const VC = window.VigenCast;
+    if (!VP) return;
+    const ground = sc.ground || 'island';
+
+    if (ground !== 'none') dioramaGround(ground, g);
+
+    const props = (sc.props || []).map((p) => ({ kind: 'prop', ...p }));
+    const cast = (sc.cast || []).map((c) => ({ kind: 'cast', ...c }));
+    const list = [...props, ...cast];
+    if (!list.length) return;
+
+    // Posisi otomatis: prop di baris belakang, karakter di baris depan.
+    const autoU = (k, n, spread) => (n > 1 ? -spread + (2 * spread * k) / (n - 1) : 0);
+    let pi = 0;
+    let ci = 0;
+    const placed = list.map((it, i) => {
+      let pos;
+      if (it.x !== undefined || it.y !== undefined) {
+        const loc = plateLocal(g, it.x ?? g.cx0, it.y ?? g.cy0);
+        pos = plateProject(g, loc.u, loc.v);
+      } else if (it.kind === 'cast') {
+        pos = plateProject(g, autoU(ci++, cast.length, 0.45), 0.40);
+      } else {
+        pos = plateProject(g, autoU(pi++, props.length, 0.40), -0.35);
+      }
+      return { ...it, px: pos.x, py: pos.y, _i: i };
+    }).sort((a, b) => a.py - b.py);
+
+    for (const it of placed) {
+      const isCast = it.kind === 'cast';
+      const st = entryAt(it, u, (isCast ? 0.26 : 0.18) + it._i * 0.07, isCast ? 'rise' : 'pop');
+      if (st.e <= 0.001) continue;
+
+      if (isCast) {
+        if (!VC || !VC.has(it.who)) continue;
+        VC.draw(ctx, it.who, {
+          x: it.px + st.dx,
+          y: it.py + st.dy,
+          scale: it.scale ?? VC.scaleFor(it.who),
+          flip: it.flip,
+          rotate: ((it.rotate || 0) * Math.PI) / 180,
+          alpha: (it.alpha ?? 1) * st.e,
+          t: u,
+          pose: it.pose || 'idle',
+        });
+      } else {
+        if (!VP.has(it.name)) continue;
+        VP.draw(ctx, it.name, {
+          x: it.px + st.dx,
+          y: it.py + st.dy,
+          scale: it.scale ?? VP.scaleFor(it.name),
+          rotate: ((it.rotate || 0) * Math.PI) / 180,
+          alpha: (it.alpha ?? 1) * st.e,
+          t: u,
+        });
+      }
+    }
+  }
+
+  /** Area aman dalam koordinat lokal scene (kebalikan transform kamera). */
+  function localSafeRect() {
+    const m = ctx.getTransform();
+    const s = state.scale || 1;
+    const a = m.a / s, b = m.b / s, c = m.c / s, d = m.d / s, e = m.e / s, f = m.f / s;
+    const det = a * d - b * c;
+    if (Math.abs(det) <= 1e-6) return { ...state.safe };
+    const inv = (x, y) => {
+      const X = x - e, Y = y - f;
+      return [(d * X - c * Y) / det, (a * Y - b * X) / det];
+    };
+    const pts = [
+      inv(state.safe.left, state.safe.top),
+      inv(state.safe.right, state.safe.top),
+      inv(state.safe.left, state.safe.bottom),
+      inv(state.safe.right, state.safe.bottom),
+    ];
+    let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+    for (const [x, y] of pts) {
+      if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+    }
+    return { left, right, top, bottom };
+  }
+
+  /** Label penunjuk: titik di objek, garis, lalu chip teks di dekatnya. */
+  function drawCallout(c, u, i) {
+    const e = easeOut(span(u, 0.9 + i * 0.16, 0.45));
+    if (e <= 0.001) return;
+
+    const block = fitBlock(c.text, {
+      maxWidth: 268, maxLines: 2, base: 27, min: 19, lineHeight: 1.22,
+      weight: '600', family: UI,
+    });
+    const w = Math.min(300, block.width + 32);
+    const h = block.height + 20;
+    const safe = localSafeRect();
+    const lx = Math.max(safe.left + w / 2 + 8, Math.min(safe.right - w / 2 - 8, c.x + c.dx));
+    const ly = Math.max(safe.top + h / 2 + 8, Math.min(safe.bottom - h / 2 - 8, c.y + c.dy));
+
+    ctx.save();
+    ctx.globalAlpha *= e;
+
+    const dx = lx - c.x;
+    const dy = ly - c.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ex = lx - (dx / len) * (w / 2 + 4);
+    const ey = ly - (dy / len) * (h / 2 + 4);
+
+    // garis penunjuk
+    ctx.strokeStyle = 'rgba(120,84,40,0.55)';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+
+    // titik jangkar
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = C.gold;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(90,60,20,0.7)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // chip
+    roundRect(lx - w / 2, ly - h / 2, w, h, 12);
+    ctx.fillStyle = 'rgba(248,239,222,0.94)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(150,112,58,0.65)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha *= e;
+    drawBlock(`${c.id || 'callout'}:${i}`, block, lx, ly, {
+      align: 'center', baseline: 'middle', color: C.ink, audit: false,
+      weight: '600', family: UI,
+    });
+    ctx.restore();
+
+    recordBox(`callout:${i}`, lx - w / 2, ly - h / 2, w, h);
+  }
+
+  function drawCallouts(sc, u) {
+    const list = sc.callouts || [];
+    for (let i = 0; i < list.length; i++) drawCallout(list[i], u, i);
+  }
+
+  /** Scene dunia isometrik: alas + prop + karakter, kamera hanya pada dunia. */
+  function sceneWorld(sc, u, withCallouts) {
+    const fade = easeOut(span(u, 0, 0.35));
+    const title = sc.title ? fitBlock(sc.title, {
+      maxWidth: 912, maxLines: 2, base: 72, min: 40, lineHeight: 1.1,
+    }) : null;
+    const body = sc.body ? fitBlock(sc.body, {
+      maxWidth: 900, maxLines: 3, base: 40, min: 26, lineHeight: 1.4,
+      weight: '400', family: UI,
+    }) : null;
+
+    const titleY = 352;
+    const bodyY = titleY + (title ? title.height + 34 : 0);
+    const textEnd = bodyY + (body ? body.height : 0);
+    const plateCy = Math.min(1410, Math.max(1310, textEnd + 500));
+
+    // dunia (boleh ikut kamera)
+    const cam = cameraAt(sc, u);
+    ctx.save();
+    if (cam && cam.content) applySceneCamera(cam);
+    drawWorldLayer(sc, u, plateGeom(plateCy));
+    if (withCallouts) drawCallouts(sc, u);
+    ctx.restore();
+
+    // teks selalu di atas dunia dan tidak ikut kamera
+    drawKicker(`${sc.id}:kicker`, sc.kicker || (withCallouts ? 'ADEGAN' : 'DIORAMA'), 84, 300, {
+      align: 'left', alpha: fade, spacing: 7,
+    });
+    if (title) {
+      drawBlock(`${sc.id}:title`, title, 84, titleY, { color: C.ink, alpha: fade });
+    }
+    if (body) {
+      const p = easeOut(span(u, 0.18, 0.5));
+      drawBlock(`${sc.id}:body`, body, 84, bodyY + (1 - p) * 22, {
+        color: C.inkSoft, alpha: p, weight: '400', family: UI,
+      });
+    }
+    layout.textBottom = textEnd;
+
+    if (sc.source) {
+      const src = fitBlock(sc.source, {
+        maxWidth: 820, maxLines: 2, base: 24, min: 20, lineHeight: 1.3,
+        weight: '400', family: UI,
+      });
+      drawBlock(`${sc.id}:source`, src, 84, state.subsActive ? 1328 : 1500, {
+        color: C.inkFaint, alpha: fade, weight: '400', family: UI,
+      });
+    }
+  }
+
+  function sceneDiorama(sc, u) {
+    sceneWorld(sc, u, false);
+  }
+
+  function sceneAdegan(sc, u) {
+    sceneWorld(sc, u, true);
+  }
+
   function sceneOutro(sc, u) {
     const fade = easeOut(span(u, 0, 0.45));
     const out = 1 - easeInOut(span(u, sc.duration - 0.4, 0.4));
@@ -734,7 +1425,7 @@
 
     ctx.save();
     ctx.globalAlpha *= easeOut(span(u, 0, 0.3));
-    ctx.fillStyle = 'rgba(10,7,4,0.58)';
+    ctx.fillStyle = C.outroOverlay;
     ctx.fillRect(0, 0, state.width, state.height);
     ctx.restore();
 
@@ -1071,6 +1762,8 @@
     else if (sc.type === 'deadpan') sceneDeadpan(sc, u);
     else if (sc.type === 'punchline') scenePunchline(sc, u);
     else if (sc.type === 'outro') sceneOutro(sc, u);
+    else if (sc.type === 'diorama') sceneDiorama(sc, u);
+    else if (sc.type === 'adegan') sceneAdegan(sc, u);
     ctx.restore();
     if (zoom !== 1) {
       if (layout.textBottom) layout.textBottom = 880 + (layout.textBottom - 880) * zoom;
@@ -1100,27 +1793,37 @@
     state.boxes = [];
     ctx.setTransform(state.scale, 0, 0, state.scale, 0, 0);
 
-    if (state.bg) ctx.drawImage(state.bg, 0, 0);
-    else {
-      ctx.fillStyle = C.bgTop;
-      ctx.fillRect(0, 0, w, h);
-    }
-    drawDust(t);
-
     const scenes = state.storyboard?.scenes || [];
     const active = scenes.filter((s) => t >= s.start && t < s.end);
     if (!active.length && scenes.length) {
       const last = scenes[scenes.length - 1];
       if (t >= last.end) active.push(last);
     }
+
+    const lead = active[0] || null;
+    const leadCam = lead ? cameraAt(lead, t - lead.start) : null;
+    const worldScene = Boolean(lead) && (lead.type === 'diorama' || lead.type === 'adegan');
+    // Scene dunia menggerakkan dunianya sendiri; latar ikut bila content true.
+    const bgCam = leadCam && (!worldScene || leadCam.content) ? leadCam : null;
+    drawBackground(bgCam);
+    drawDust(t);
+
+    const chapterInfo = state.styleHeader ? chapterAt(t) : { chapter: null };
+    const headerShift = chapterInfo.chapter ? 48 : 0;
     for (const sc of active) {
       const u = t - sc.start;
+      const cam = cameraAt(sc, u);
+      const isWorld = sc.type === 'diorama' || sc.type === 'adegan';
       ctx.save();
+      // Scene dunia menerapkan kamera hanya ke lapisan dunia (teks tetap diam).
+      if (!isWorld) applySceneCamera(cam);
+      ctx.translate(0, headerShift);
       ctx.globalAlpha *= sceneFade(sc, u);
       drawScene(sc, u);
       ctx.restore();
     }
 
+    drawChapter(t, chapterInfo);
     drawSubtitles(t);
     drawProgress(t);
     drawWatermark();
@@ -1145,11 +1848,40 @@
 
     const sb = cfg.storyboard || null;
     state.storyboard = sb;
+
+    state.styleId = sb?.style || 'sejarah/sepia-archive';
+    const tokens = STYLE_TOKENS[state.styleId] || STYLE_TOKENS['sejarah/sepia-archive'];
+    C = tokens.colors;
+    DISPLAY = tokens.display;
+    state.styleHeader = Boolean(tokens.header);
+
     state.subs = Array.isArray(sb?.subs) ? sb.subs : [];
     state.subsActive = state.subs.length > 0;
     state.duration = sb?.duration ?? cfg.duration ?? 5;
     state.safe = sb?.safe || FALLBACK_SAFE;
     state.punchlinePause = sb?.punchlinePause ?? 0.4;
+
+    // Validasi nama prop/karakter scene dunia sedini mungkin (gagal jelas).
+    if (sb && Array.isArray(sb.scenes) && window.VigenProps) {
+      const badProps = [];
+      const badCast = [];
+      for (const sc of sb.scenes) {
+        if (sc.type !== 'diorama' && sc.type !== 'adegan') continue;
+        for (const p of sc.props || []) {
+          if (!window.VigenProps.has(p.name)) badProps.push(`${sc.id}:${p.name}`);
+        }
+        for (const c of sc.cast || []) {
+          if (!window.VigenCast || !window.VigenCast.has(c.who)) badCast.push(`${sc.id}:${c.who}`);
+        }
+      }
+      if (badProps.length) {
+        throw new Error(`prop tidak dikenal (${badProps.join(', ')}). Pilihan: ${window.VigenProps.names.join(', ')}`);
+      }
+      if (badCast.length) {
+        const names = window.VigenCast ? window.VigenCast.names.join(', ') : '-';
+        throw new Error(`karakter tidak dikenal (${badCast.join(', ')}). Pilihan: ${names}`);
+      }
+    }
 
     canvas.width = canvasW;
     canvas.height = canvasH;
